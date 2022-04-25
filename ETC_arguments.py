@@ -46,7 +46,7 @@ obsparam.add_argument('-skymag', type=float, required=True, help=help)
 
 sourceparam = parser.add_argument_group('Source parameters')
 
-help = 'REQUIRED Source magnitude'
+help = 'REQUIRED Source magnitude (observed)'
 sourceparam.add_argument('-mag', type=float, required=True, help=help)
 
 help = 'REQUIRED Reference system and filter for source magnitude, e.g. "VEGA johnson_v"'
