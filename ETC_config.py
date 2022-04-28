@@ -32,7 +32,7 @@ PSFsum2DFile = '/home/developer/Software/ETC/PSFsum2D.pkl' #pre-tabulated integr
 # Channel-wise fixed parameters for this instrument; all channel keys must match
 
 channels=['U','G','R','I']
-channel_dicts = []
+#channel_dicts = []
 
 # Colors for plotting
 channelColor={
