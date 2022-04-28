@@ -346,8 +346,20 @@ if args.plotSNR or args.plotdiag:
 
 if args.plotdiag:
 
+	signal = {}
+	bgsky = {}
+	for k in channels:
+		signal[k] = sourceSpectrumFPA['center'][k] + 2*sourceSpectrumFPA['side'][k]
+		#signal[k] = sourceSpectrum
+		bgsky[k] = skySpectrumFPA['center'][k] + 2*skySpectrumFPA['side'][k]
+
 	# Display the source spectrum
-	sourceSpectrum.plot()
+	plotAllChannels(signal ,lambda_range=args.wrange ,binned=True ,binCenters=binCenters)
 	plt.title(label + '\n'+ str(args.mag*magunit) +' '+ args.magref[1])
 	plt.xlim(totalRange)
 	plt.savefig('source.png')
+
+	# Display the sky spectrum
+	plotAllChannels(bgsky ,lambda_range=args.wrange ,binned=True ,binCenters=binCenters)
+	plt.xlim(totalRange)
+	plt.savefig('sky.png')
