@@ -82,41 +82,6 @@ def Extinction_atm(airmass):
 
     return bandpass
 
-def convolveLSF_OLD(spectrum, LSFsigma ,kernel_upsample=5. ,kernel_range=4.):
-    '''Placeholder until we have LSF data. Convolve spectrum at focal plane with LSF'''
-    
-    assert isinstance(LSFsigma,u.Quantity), "LSF sigma needs units"
-    assert isinstance(spectrum ,(SourceSpectrum,SpectralElement)), \
-        "Input spectrum must be SourceSpectrum or SpectralElement class"
-    
-    from scipy.signal import convolve
-
-    # LSF placeholder model is just a gaussian
-    LSF = Gaussian1D(amplitude=1. ,mean=0. ,stddev=LSFsigma)
-    dlamda = LSFsigma/kernel_upsample
-    
-    ## KERNEL RANGE MUST HAVE 0 IN THE EXACT CENTER (need odd array length)
-    xk = rangeQ(0.*LSFsigma,kernel_range*LSFsigma+dlamda,dlamda)
-    xk = hstack((-xk[::-1],xk[1:]))  # Symmetrizes range, e.g. [-2,-1,0,1,2]
-
-    lamdamin, lamdamax = spectrum.waverange
-    x = rangeQ(lamdamin ,lamdamax ,dlamda)
-
-    # Dimensionless arrays for use with convolve; BEWARE of boundary behavior
-    # convolve(mode=same) matches size of 1st argument
-    kernel = LSF(xk).value
-    spec2 = convolve(spectrum(x).value, kernel, mode='same', method='auto')/kernel.sum()
-
-    # Convert array to spectrum class; Model will be Empirical1D even if input was compound model
-    if isinstance(spectrum ,SourceSpectrum):
-        newspec = SourceSpectrum(Empirical1D, points=x, lookup_table=spec2*spectrum(1).unit, keep_neg=True)
-    elif isinstance(spectrum ,SpectralElement):
-        newspec = SpectralElement(Empirical1D, points=x, lookup_table=spec2, keep_neg=True)
-    else:
-        raise Exception("Unsupported input spectrum class")
-        
-    return newspec
-
 def convolveLSF(spectrum ,slit_w ,seeing ,ch ,kernel_upsample=5. ,kernel_range_factor=4. ,pivot=500*u.nm):
     '''Placeholder until we have LSF data. Convolve spectrum at focal plane with LSF'''
     '''

@@ -1,55 +1,25 @@
 #!/usr/bin/env python
 # Author: Chaz Shapiro (2022)
 
-# TODOS: K-CORRECTION, GALAXY EXTINCTION
+# TODOS: K-CORRECTION
 #        USER SED, EXTENDED SOURCES (mag/arcsec**2), HOST GALAXY (mag/area)
 #        MOON PHASE/POSITION, ZODIACAL LIGHT
 #        Unique FILENAMES for plots?
 #
 # TODO:  WHEN TO NORMALIZE???  After Z, K, A_V, atmosphere?  Is vega model intrinsic or observed?
 #
-# A(w) = -2.5*log10(I/I0)
-# A(V) = E(B-V) * R_V  ;  E(B-V) = A(B)-A(V)  selective extinction / color excess
-# R_V ~ 3.1 ; 1/R_V  normalized extinction
-# A(w) ~ w^(-1.5)  ; A(V) = A(w=550nm)
 
 import timer
 tt = timer.Timer()
-tt.start()
+tt.start()  # Measures time until tt.stop()
 
 from ETC_arguments import *
 args = parser.parse_args()
+check_inputs_add_units(args)
 
 from ETC_import import *
 from numpy import array, arange, vstack, log
-from os.path import isfile
 
-
-# Validity checks on inputs
-
-if args.srcmodel=='template' and args.srctemp is None:
-    parser.error("-srcmodel template requires -srctemp")
-
-choices = ['nonstellar', 'novae', 'current_calspec']
-if args.srctemp is not None:
-    if args.srctemp[0] not in choices: parser.error("-srctemp CAT must be in "+str(choices))
-else:
-    args.srctemp = [None,None]
-
-if args.srcmodel=='blackbody' and args.tempK is None:
-    parser.error("-srcmodel blackbody requires -tempK")
-
-choices = ['AB','VEGA']
-if args.magref[0].upper() not in choices: parser.error('-magref SYSTEM must be in '+str(choices))
-
-# Append units to inputs where applicable
-args.slit *= u.arcsec
-args.wrange *= u.nm
-if args.ETCmode == 'EXPTIME': args.ETCfixed *= u.s
-args.seeing[0] *= u.arcsec
-args.seeing[1] *= u.nm
-if args.tempK is not None: args.tempK*=u.K
-    
 # Unpack SNR or EXPTIME and set the other to None
 if args.ETCmode == 'SNR':
     SNR_target, exptime = (args.ETCfixed, None)
@@ -57,17 +27,11 @@ elif args.ETCmode == 'EXPTIME':
     SNR_target, exptime = (None, args.ETCfixed)
 else: raise Exception('Invalid ETC mode')
 
-# Check wavelength range is OK
-if args.wrange[0] >= args.wrange[1]: raise ValueError("Wavelength range must be in form [min, max]")
-if args.wrange[0] < channelRange[args.channel][0]: raise ValueError("Wavelength range not in channel")
-if args.wrange[1] > channelRange[args.channel][1]: raise ValueError("Wavelength range not in channel")
-
 # Only bother with channels being used for SNR;  Saves ~0.3s
 if not args.plotSNR and not args.plotdiag: channels = [args.channel]
 
 # Some derived parameters; accounts for wavelength binning
 # TODO: SHOULD WE MOVE THESE TO IMPORT FILE?
-
 binCenters={}
 dispersion_scale={}
 for k in channels:
@@ -85,19 +49,17 @@ print( args.wrange, "-->", bc[closest_bin_i[0]:closest_bin_i[1]+1:closest_bin_i[
 #if ~args.plotSNR and ~args.plotdiag: binCenters[args.channel] = bc[target_slice]
 
 
-# Model and normalize source spectrum
-
+# Load source spectrum model
 if args.srcmodel.lower() == 'template':
     label = args.srctemp[0]+'/'+args.srctemp[1]  #used for plot labels
     template_path = sourcesdir+label+'.fits'
+    from os.path import isfile
     if not isfile(template_path): parser.error("Source template not found: %s" % template_path)
-    sourceSpectrum = SourceSpectrum.from_file(template_path)
-    
+    sourceSpectrum = SourceSpectrum.from_file(template_path)    
 elif args.srcmodel.lower() == 'blackbody':
     from synphot.models import BlackBodyNorm1D
     label = 'blackbody '+str(args.tempK)
     sourceSpectrum = SourceSpectrum(BlackBodyNorm1D, temperature=args.tempK)
-
 #elif args.srcmodel.lower() == 'constant':
 #from astropy.modeling.models import Const1D    
 
@@ -105,11 +67,24 @@ else: raise Exception('Invalid source model')
 
 # Redshift it
 sourceSpectrum.z = args.z
-    
-# Load bandpass for normalization
-norm_band = SpectralElement.from_filter(args.magref[1])
 
-# Normalize
+# Galactic extinction
+# https://pysynphot.readthedocs.io/en/latest/spectrum.html#pysynphot-extinction
+if args.E_BV != 0:
+	from synphot import ReddeningLaw
+	redlaw = ReddeningLaw.from_extinction_model(args.extmodel)
+	sourceSpectrum *= SpectralElement(redlaw.extinction_curve(args.E_BV))
+
+# Load bandpass for normalization
+if args.magref[1].lower() == 'user':
+	# Use the wavelength range from command line
+	from synphot.models import Box1D
+	norm_band = SpectralElement(Box1D, amplitude=1, x_0=args.wrange.mean(), 
+		                        width=(args.wrange[1]-args.wrange[0]) )
+else:
+	norm_band = SpectralElement.from_filter('johnson_'+args.magref[1].lower())
+
+# Normalize source
 if args.magref[0].upper() == 'AB': magunit=u.ABmag
 elif args.magref[0].upper() == 'VEGA': magunit=uu.VEGAMAG
 
@@ -117,8 +92,8 @@ if magunit is uu.VEGAMAG:
     sourceSpectrum = sourceSpectrum.normalize(args.mag*magunit ,band=norm_band 
                                               ,vegaspec=SourceSpectrum.from_vega())
 else:
-    sourceSpectrum = sourceSpectrum.normalize(args.mag*magunit ,band=norm_band 
-                                              ,wavelengths=sourceSpectrum.waveset)
+    sourceSpectrum = sourceSpectrum.normalize(args.mag*magunit ,band=norm_band )
+                                              #,wavelengths=sourceSpectrum.waveset)
 
 
 # Load sky background; eventually will need to interpolate a larger table
@@ -252,16 +227,16 @@ def SNR_from_exptime(exptime, wave_range=None, ch=None ,Np=None):
             signal[sigpath][k] = sourceSpectrumFPA[sigpath][k](binCenters[k] 
                                     ,flux_unit='count' ,area=telescope_Area)/u.s*exptime
 
-        # Background variances get 2x to acount for sky subtraction
+        # TODO: Should background variances be 2x to acount for sky subtraction?
         bgvar[sigpath] = {}
         for k in chanlist:
-            bgvar[sigpath][k] = 2*skySpectrumFPA[sigpath][k](binCenters[k] 
+            bgvar[sigpath][k] = skySpectrumFPA[sigpath][k](binCenters[k] 
                                     ,flux_unit='count' ,area=telescope_Area)/u.s*exptime
-            bgvar[sigpath][k] += 2*darkcurrent[k]*exptime*u.pix 
+            bgvar[sigpath][k] += darkcurrent[k]*exptime*u.pix 
 
             bgvar[sigpath][k] *= args.binning[1]  #account for more background per pixel if binning
 
-            bgvar[sigpath][k] += 2*(readnoise[k]*u.pix)**2/u.ct  #read noise per read pixel is unchanged
+            bgvar[sigpath][k] += (readnoise[k]*u.pix)**2/u.ct  #read noise per read pixel is unchanged
             
     SNR = {}
 
