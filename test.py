@@ -186,27 +186,27 @@ for k in channels:
     # totalSlicer[k] is the total throughput of the slice(s) being used for SNR, so...
     # ... totalSlicer*profile_slit distributes the used light over the used slice half-profiles
 
-#pdb.set_trace()
+
 # Multiply source spectrum by all throughputs, atmosphere, slit loss, and convolve with LSF
 # These are the flux densities at the focal plane array (FPA)
 # Side slice throughputs are for a SINGLE side slice
 
-sourceSpectrumFPA={}  #Total flux summed over all spatial pixels
-skySpectrumFPA={}     #Flux PER spatial pixel
+sourceSpectrumFPA={}  #Total flux summed over all spatial pixels and used slices
+skySpectrumFPA={}     #Flux PER spatial pixel, depends on slice bc of slicer optics
 
-for lightpath in ['center','side']:
-    sourceSpectrumFPA[lightpath] = {}
-    skySpectrumFPA[lightpath]={}
-    
-    for k in channels:
-        spec = sourceSpectrum * throughput_atm * TP[k] * totalSlicer[k]
-        sourceSpectrumFPA[lightpath][k] = convolveLSF(spec, args.slit ,args.seeing[0] ,k ,pivot=args.seeing[1])
+for k in channels:
+    spec = sourceSpectrum * throughput_atm * TP[k] * totalSlicer[k]
+    sourceSpectrumFPA[k] = convolveLSF(spec, args.slit ,args.seeing[0] ,k ,pivot=args.seeing[1])
 
-        # Doesn't include atmosphere or slitloss for sky flux
-        # Scale sky flux by effective area: slit_width*pixel_height
+    # Doesn't include atmosphere or slitloss for sky flux
+    # Scale sky flux by effective area: slit_width*pixel_height
+    skySpectrumFPA[k]={}    
+    for lightpath in ['center','side']:
         spec = skySpec * TP[k] * bg_pix_area[k]
         if lightpath == 'side': spec *= throughput_slicerOptics
-        skySpectrumFPA[lightpath][k] = convolveLSF(spec, args.slit ,args.seeing[0] ,k ,pivot=args.seeing[1])
+        skySpectrumFPA[k][lightpath] = convolveLSF(spec, args.slit ,args.seeing[0] ,k ,pivot=args.seeing[1])
+
+#pdb.set_trace()
 
 # Create workhorse function for solving for EXPTIME
 def SNR_from_exptime(exptime, wave_range=None, ch=None ,Np=None):
@@ -242,13 +242,13 @@ def SNR_from_exptime(exptime, wave_range=None, ch=None ,Np=None):
     for sigpath in ['center','side']:
         signal[sigpath] = {}
         for k in chanlist:
-            signal[sigpath][k] = sourceSpectrumFPA[sigpath][k](binCenters[k] 
+            signal[sigpath][k] = sourceSpectrumFPA[k](binCenters[k] 
                                     ,flux_unit='count' ,area=telescope_Area)/u.s*exptime
 
         # TODO: Should background variances be 2x to acount for sky subtraction?
         bgvar[sigpath] = {}
         for k in chanlist:
-            bgvar[sigpath][k] = skySpectrumFPA[sigpath][k](binCenters[k] 
+            bgvar[sigpath][k] = skySpectrumFPA[k][sigpath](binCenters[k] 
                                     ,flux_unit='count' ,area=telescope_Area)/u.s*exptime
             bgvar[sigpath][k] += darkcurrent[k]*exptime*u.pix 
 
@@ -341,9 +341,9 @@ if args.plotdiag:
 	signal = {}
 	bgsky = {}
 	for k in channels:
-		signal[k] = sourceSpectrumFPA['center'][k] + 2*sourceSpectrumFPA['side'][k]
+		signal[k] = sourceSpectrumFPA[k] + 2*sourceSpectrumFPA[k]
 		#signal[k] = sourceSpectrum
-		bgsky[k] = skySpectrumFPA['center'][k] + 2*skySpectrumFPA['side'][k]
+		bgsky[k] = skySpectrumFPA[k]['center'] + 2*skySpectrumFPA[k]['side']
 
 	# Display the source spectrum
 	plotAllChannels(signal ,lambda_range=args.wrange ,binned=True ,binCenters=binCenters)
