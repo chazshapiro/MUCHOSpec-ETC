@@ -173,7 +173,7 @@ for lightpath in ['center','side']:
     
     for k in channels:
         spec = sourceSpectrum * throughput_atm * throughput_slicer[lightpath]* TP[k]
-        if lightpath=='side': spec*=throughput_slicerOptics
+        #if lightpath=='side': spec*=throughput_slicerOptics
         sourceSpectrumFPA[lightpath][k] = convolveLSF(spec, args.slit ,args.seeing[0] ,k ,pivot=args.seeing[1])
 
         # Doesn't include atmosphere or slitloss for sky flux
@@ -181,7 +181,6 @@ for lightpath in ['center','side']:
         spec = skySpec * TP[k] * bg_pix_area[k]
         if lightpath=='side': spec*=throughput_slicerOptics
         skySpectrumFPA[lightpath][k] = convolveLSF(spec, args.slit ,args.seeing[0] ,k ,pivot=args.seeing[1])
-
 
 # Compute pixelized spatial profiles for a flat spectrum
 # Multiplying spectra by these profiles "distributes" counts over pixels in spatial direction
@@ -258,8 +257,12 @@ def SNR_from_exptime(exptime, wave_range=None, ch=None ,Np=None):
 
         # SNR assuming flux is extracted from profile fit
         if Np is None:
-            NOISE2 = covar_ii['center'] + 2*covar_ii['side']
-            SIGNAL = signal['center'][k] + 2*signal['side'][k]
+            if args.noslicer:
+                SIGNAL = signal['center'][k]
+                NOISE2 = covar_ii['center']
+            else:
+                SIGNAL = signal['center'][k] + 2*signal['side'][k]
+                NOISE2 = covar_ii['center'] + 2*covar_ii['side']
             SNR[k] = SIGNAL/NOISE2**.5
 
         # Repeat for peak profile pixels only
