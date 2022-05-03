@@ -2,7 +2,6 @@ import argparse
 
 help = 'Run the Exposure Time Calculator.  Outputs are SNR, EXPTIME, wavelength range, and optional plots. '
 help += 'The model assumes that signals from 3 image slicer paths are summed for the SNR calculation.'
-#parser = argparse.ArgumentParser(description=help)
 epilog = 'Example minimum argument set: \n./main.py G 500 510 SNR 10 -slit .5 -seeing 1 500 -airmass 1 -skymag 21.4 -srcmodel blackbody -tempK 6000 -mag 18. -magref AB user'
 
 parser = argparse.ArgumentParser(  # Make printed help text wider
@@ -28,6 +27,9 @@ parser.add_argument('-binning', type=int, nargs=2, default=[1,1], metavar=('BIN_
 
 help = 'Number of spatial pixels on either side of profile center to use for SNR. If none, fit spatial profile'
 parser.add_argument('-SNR_pix', type=int, default=None, help=help)
+
+help = 'Only use flux from the center slit, not side slices'
+parser.add_argument('-noslicer', action='store_true', help=help)
 
 help = 'Plot SNR vs. wavelength for the solution'
 parser.add_argument('-plotSNR', action='store_true', help=help)

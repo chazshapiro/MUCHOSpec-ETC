@@ -1,5 +1,6 @@
 
 #TODO: remove asserts
+#TODO: rewite LSF convolution using astropy/specutils
 
 #import numpy as np
 from numpy import array, arange, pi, hstack, vstack
@@ -10,6 +11,12 @@ import astropy.units as u
 import synphot.units as uu  # used in main code, not this file
 
 from ETC_config import *
+
+from sys import path  # path[0] is location of main script
+sourcesdir = path[0]+'/sources/'
+#CSVdir = path[0]+'/CSV/'
+PSFsum2DFile = path[0]+'/PSFsum2D.pkl' #pre-tabulated integral of PSF over slit and side slices
+
 
 # Check config file inputs are valid and make some derived parameters
 
@@ -30,7 +37,6 @@ dispersion_scale_nobin={}  # Unit equivalence
 for k in channels:
     lambdamin,lambdamax = channelRange[k]
     dispersion_scale_nobin[k]=u.pixel_scale( (lambdamax-lambdamin)/(Npix_dispers[k]*u.pix) )
-
 
 # Min and max wavelength of all channels together
 totalRange = array([channelRange[k].to('nm') for k in channels]) #np.array() removes units

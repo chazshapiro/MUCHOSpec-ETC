@@ -1,6 +1,5 @@
 # Fixed parameters for this instrument
 
-#TODO: hide sourcesdir and PSFsum2DFile with imports (?)
 #TODO: asymmetric plate scale?
 
 import astropy.units as u
@@ -19,15 +18,11 @@ moffat_theta_factor = 0.5/(2**(1./moffat_beta) - 1.)**.5  # theta = factor*seein
 CSVdir='/home/developer/Software/ETC/CSV/'
 default_waveunit=u.nm  #assume units for all CSV files
 
-sourcesdir='/home/developer/Software/ETC/sources/'
-
 skybackground_file = 'Gemini_skybg_50_10.txt'  #placeholder sky model
 
 throughputFile_atm = 'atm-extinction-Palomar.csv'  #dimensionless T  (Flux/Flux_above_atmosphere)
 throughputFile_telescope = 'throughput-Palomar-200inch.csv'
 throughputFile_slicer = 'throughput_slicersides_temp.csv'
-
-PSFsum2DFile = '/home/developer/Software/ETC/PSFsum2D.pkl' #pre-tabulated integral of PSF over slit and side slices
 
 # Channel-wise fixed parameters for this instrument; all channel keys must match
 

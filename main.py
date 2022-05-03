@@ -6,6 +6,8 @@
 #        MOON PHASE/POSITION, ZODIACAL LIGHT
 #        Unique FILENAMES for plots?
 #
+# TODO:  Should background variances be doubled? (sky subtraction)
+#
 # TODO:  WHEN TO NORMALIZE???  After Z, K, A_V, atmosphere?  Is vega model intrinsic or observed?
 #
 
@@ -84,7 +86,8 @@ if args.magref[1].lower() == 'user':
 else:
 	norm_band = SpectralElement.from_filter('johnson_'+args.magref[1].lower())
 
-# Normalize source
+# Normalize source - this is done after all astrophysical adjustments and before the atmosphere
+# So we are fixing the magnitude "at the top of the atmosphere"
 if args.magref[0].upper() == 'AB': magunit=u.ABmag
 elif args.magref[0].upper() == 'VEGA': magunit=uu.VEGAMAG
 
@@ -278,7 +281,7 @@ def SNR_from_exptime(exptime, wave_range=None, ch=None ,Np=None):
 if SNR_target is not None:
     from scipy import optimize
 
-    #TODO: Maybe find root in log-log space where SNR(t) is ~linear
+    #TODO: Maybe find root in log-log space where SNR(t) is ~linear; doesn't save much time
 
     def SNRfunc(t_sec):
         #return log( SNR_from_exptime(10**t_sec*u.s, wave_range=args.wrange, ch=args.channel ,method='peak') / SNR_target)
