@@ -8,9 +8,9 @@
 #
 # TODO:  Should background variances be doubled? (sky subtraction)
 #
-# TODO:  WHEN TO NORMALIZE???  After Z, K, A_V, atmosphere?  Is vega model intrinsic or observed?
+# TODO:  Check valid input parameter ranges?
 #
-import pdb
+
 import timer
 tt = timer.Timer()
 tt.start()  # Measures time until tt.stop()
@@ -206,8 +206,6 @@ for k in channels:
         if lightpath == 'side': spec *= throughput_slicerOptics
         skySpectrumFPA[k][lightpath] = convolveLSF(spec, args.slit ,args.seeing[0] ,k ,pivot=args.seeing[1])
 
-#pdb.set_trace()
-
 # Create workhorse function for solving for EXPTIME
 def SNR_from_exptime(exptime, wave_range=None, ch=None ,Np=None):
     '''Compute SNR from inputs'''
@@ -347,7 +345,7 @@ if args.plotdiag:
 
 	# Display the source spectrum
 	plotAllChannels(signal ,lambda_range=args.wrange ,binned=True ,binCenters=binCenters)
-	plt.title(label + '\n'+ str(args.mag*magunit) +' '+ args.magref[1])
+	plt.title('Source counts/s (%s)'%label) # + '\n'+ str(args.mag*magunit) +' '+ args.magref[1])
 	plt.xlim(totalRange)
 	plt.savefig('source.png')
 
