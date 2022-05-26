@@ -4,7 +4,7 @@ sourcesdir = path[0]+'/sources/'
 
 help = 'Run the Exposure Time Calculator.  Outputs are SNR, EXPTIME, wavelength range, and optional plots. '
 help += 'The model assumes that signals from 3 image slicer paths are summed for the SNR calculation.'
-epilog = 'Example minimum argument set: \n./main.py G 500 510 SNR 10 -slit .5 -seeing 1 500 -airmass 1 -skymag 21.4 -srcmodel blackbody -tempK 6000 -mag 18. -magref AB user'
+epilog = 'Example minimum argument set: \n./main.py G 500 510 SNR 10 -slit .5 -seeing 1 500 -airmass 1 -skymag 21.4 -srcmodel blackbody 6000 -mag 18. -magref AB user'
 
 parser = argparse.ArgumentParser(  # Make printed help text wider
   formatter_class=lambda prog: argparse.HelpFormatter(prog,max_help_position=40) ,description=help ,epilog=epilog)
@@ -82,16 +82,10 @@ help = '''Reference system (AB, VEGA) and Johnson filter (UBVRIJK) for source ma
 Use FILTER="user" to normalize to the WRANGE input'''
 sourceparam_req.add_argument('-magref', type=str, nargs=2, metavar=('SYSTEM','FILTER'), required=True, help=help)
 
-help = 'Astronomical source model type'
-sourceparam_req.add_argument('-srcmodel', type=str, required=True, choices=['blackbody', 'template'], help=help)
+help = 'Astronomical source model.  Examples: "blackbody 5000", "template spiral_001"'
+sourceparam_req.add_argument('-srcmodel', nargs='+', required=True, help=help)
 
 sourceparam_add = parser.add_argument_group('Additional source parameters')
-
-help = 'Source template filename; REQUIRED with -srcmodel template'
-sourceparam_add.add_argument('-srctemp', type=str, metavar='FILE', help=help)
-
-help = 'Blackbody temperature (K); REQUIRED with -srcmodel blackbody'
-sourceparam_add.add_argument('-tempK', type=posfloat, help=help)
 
 help = 'Redshift'
 sourceparam_add.add_argument('-z', type=nonegfloat, default=0., help=help)
@@ -106,13 +100,17 @@ sourceparam_add.add_argument('-extmodel', type=str, default='mwavg', help=help)
 # Check that inputs are valid and append units where applicable
 def check_inputs_add_units(args):
 
-	# Check for template if using a template model
-	if args.srcmodel=='template':
+	if len(args.srcmodel) < 2: parser.error('-srcmodel requires at least 2 arguments')
 
-		if args.srctemp is None:
-			parser.error("-srcmodel template requires -srctemp")
+	choices = ['blackbody','template']
+	if args.srcmodel[0].lower() not in choices: parser.error('-srcmodel first argument must be in '+str(choices))
 
-		# Check for valid template - automatically go looking in the sources directory
+	# Check for valid template if using a template model
+	if args.srcmodel[0].lower()=='template':
+
+		args.srctemp = args.srcmodel[1]  # copy template name to new attribute
+
+		# Automatically go looking for the template in the sources directory
 		from os import walk
 		from os.path import join as joinpath
 		foundTemplate = False
@@ -126,11 +124,12 @@ def check_inputs_add_units(args):
 						foundTemplate = True
 						continue
 
-		if not foundTemplate: parser.error("Could not find source template: "+args.srctemp)
+		if not foundTemplate: parser.error("Could not find source template: "+args.srctemp+'.fits')
 
 	# Check for temperature if using blackbody model
-	if args.srcmodel=='blackbody' and args.tempK is None:
-	    parser.error("-srcmodel blackbody requires -tempK")
+	if args.srcmodel[0].lower()=='blackbody':
+		try: args.tempK = posfloat(args.srcmodel[1])  # copy blackbody temperature to new attribute
+		except: parser.error("-srcmodel blackbody TEMPK requires TEMPK to be a positive float")
 
 	# Valid mag system
 	choices = ['AB','VEGA']

@@ -52,10 +52,10 @@ print( args.wrange, "-->", bc[closest_bin_i[0]:closest_bin_i[1]+1:closest_bin_i[
 
 
 # Load source spectrum model
-if args.srcmodel.lower() == 'template':
+if args.srcmodel[0].lower() == 'template':
     label = args.srctemp.split('/')[-1]  #used for plot labels
     sourceSpectrum = SourceSpectrum.from_file(args.srctemp)
-elif args.srcmodel.lower() == 'blackbody':
+elif args.srcmodel[0].lower() == 'blackbody':
     from synphot.models import BlackBodyNorm1D
     label = 'blackbody '+str(args.tempK)
     sourceSpectrum = SourceSpectrum(BlackBodyNorm1D, temperature=args.tempK)
