@@ -53,11 +53,8 @@ print( args.wrange, "-->", bc[closest_bin_i[0]:closest_bin_i[1]+1:closest_bin_i[
 
 # Load source spectrum model
 if args.srcmodel.lower() == 'template':
-    label = args.srctemp[0]+'/'+args.srctemp[1]  #used for plot labels
-    template_path = sourcesdir+label+'.fits'
-    from os.path import isfile
-    if not isfile(template_path): parser.error("Source template not found: %s" % template_path)
-    sourceSpectrum = SourceSpectrum.from_file(template_path)    
+    label = args.srctemp.split('/')[-1]  #used for plot labels
+    sourceSpectrum = SourceSpectrum.from_file(args.srctemp)
 elif args.srcmodel.lower() == 'blackbody':
     from synphot.models import BlackBodyNorm1D
     label = 'blackbody '+str(args.tempK)

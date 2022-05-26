@@ -1,4 +1,6 @@
 import argparse
+from sys import path
+sourcesdir = path[0]+'/sources/'
 
 help = 'Run the Exposure Time Calculator.  Outputs are SNR, EXPTIME, wavelength range, and optional plots. '
 help += 'The model assumes that signals from 3 image slicer paths are summed for the SNR calculation.'
@@ -85,8 +87,8 @@ sourceparam_req.add_argument('-srcmodel', type=str, required=True, choices=['bla
 
 sourceparam_add = parser.add_argument_group('Additional source parameters')
 
-help = 'Source template category and filename; REQUIRED with -srcmodel template'
-sourceparam_add.add_argument('-srctemp', type=str, nargs=2, metavar=('CAT','FILE'), help=help)
+help = 'Source template filename; REQUIRED with -srcmodel template'
+sourceparam_add.add_argument('-srctemp', type=str, metavar='FILE', help=help)
 
 help = 'Blackbody temperature (K); REQUIRED with -srcmodel blackbody'
 sourceparam_add.add_argument('-tempK', type=posfloat, help=help)
@@ -105,15 +107,26 @@ sourceparam_add.add_argument('-extmodel', type=str, default='mwavg', help=help)
 def check_inputs_add_units(args):
 
 	# Check for template if using a template model
-	if args.srcmodel=='template' and args.srctemp is None:
-	    parser.error("-srcmodel template requires -srctemp")
+	if args.srcmodel=='template':
 
-	# Valid template type
-	choices = ['nonstellar', 'novae', 'current_calspec']
-	if args.srctemp is not None:
-	    if args.srctemp[0] not in choices: parser.error("-srctemp CAT must be in "+str(choices))
-	else:
-	    args.srctemp = [None,None]
+		if args.srctemp is None:
+			parser.error("-srcmodel template requires -srctemp")
+
+		# Check for valid template - automatically go looking in the sources directory
+		from os import walk
+		from os.path import join as joinpath
+		foundTemplate = False
+		for root, dirs, files in walk(sourcesdir):
+			if not foundTemplate:
+				for name in files:
+					if name == args.srctemp+".fits":
+						dir_and_name = '/'.join(joinpath(root, name).split('/')[-2:])
+						print("Found template: "+dir_and_name)
+						args.srctemp = joinpath(root, name)
+						foundTemplate = True
+						continue
+
+		if not foundTemplate: parser.error("Could not find source template: "+args.srctemp)
 
 	# Check for temperature if using blackbody model
 	if args.srcmodel=='blackbody' and args.tempK is None:
