@@ -7,9 +7,6 @@
 #        Unique FILENAMES for plots?
 #
 # TODO:  Should background variances be doubled? (sky subtraction)
-#
-# TODO:  Check valid input parameter ranges?
-#
 
 import timer
 tt = timer.Timer()
@@ -143,18 +140,9 @@ for k in channels:
 # Compute transmission thru slit/slicer sections as function of slit width and seeing(wavelength)
 # Assumes seeing-limited PSF
 
-# Slow function of wavelength so choose 10nm sampling
-lams = rangeQ(totalRange[0],totalRange[1],10*u.nm)
-slitfracs = slitFractions(lams ,args.slit ,slit_h ,args.seeing[0] ,pivot=args.seeing[1])
-
 # Combine slit fractions arrays with Optics to make throughput elements
-# TODO: remove this variable, just use slitfracs?
-throughput_slicer = {}
-throughput_slicer['center'] = SpectralElement(Empirical1D, points=lams, lookup_table=slitfracs['center'])
-throughput_slicer['side'] = SpectralElement(Empirical1D, points=lams, lookup_table=slitfracs['side'])
+throughput_slicer = slitEfficiency(args.slit ,slit_h ,args.seeing[0] ,pivot=args.seeing[1])
 throughput_slicer['side'] *= throughput_slicerOptics
-throughput_slicer['total'] = SpectralElement(Empirical1D, points=lams, 
-                            lookup_table=slitfracs['center']+2*slitfracs['side']*throughput_slicerOptics(lams).value)
 
 # Compute pixelized spatial profiles for a flat spectrum
 # Multiplying spectra by these profiles "distributes" counts over pixels in spatial direction
@@ -163,8 +151,9 @@ throughput_slicer['total'] = SpectralElement(Empirical1D, points=lams,
 profile_slit = {}
 totalSlicer={}        #Total slicer throughput including all slices and optics
 
+# profile_slit[k][lightpath] sums to 0.5 in each w bin and each path individually
+# we want it to be 0.5 when summed over all paths, with the correct relative path efficiencies
 for k in channels:
-    # profile_slit[k][lightpath] sums to 0.5 in each w bin and each path
     profile_slit[k] = profileOnDetector(k ,args.slit ,args.seeing[0] ,args.seeing[1] ,binCenters[k]
                                         ,spatial_range=None ,bin_spatial=args.binning[1])
     # Shape is (Npix, Nlambda)
@@ -179,9 +168,9 @@ for k in channels:
     for lightpath in profile_slit[k].keys():
         profile_slit[k][lightpath] *= 0.5/renorm
 
-    # profile_slit[k][lightpath] now sums to 0.5 in each w bin when summed over paths
-    # totalSlicer[k] is the total throughput of the slice(s) being used for SNR, so...
+    # totalSlicer[k] is the total throughput of signal through all slice(s) being used for SNR, so...
     # ... totalSlicer*profile_slit distributes the used light over the used slice half-profiles
+    # This separation makes the covariance matrix calculation easier later on
 
 
 # Multiply source spectrum by all throughputs, atmosphere, slit loss, and convolve with LSF

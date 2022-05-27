@@ -187,6 +187,27 @@ def slitFractions(lam, w ,h ,FWHM ,pivot=500.*u.nm):
     sideFrac = (totalFrac-centerFrac)/2.
     return {'total':totalFrac, 'center':centerFrac, 'side':sideFrac}
 
+def slitEfficiency(w ,h ,FWHM ,pivot=500.*u.nm):
+    '''Compute fraction of PSF passing through slit and side slices, assuming Moffat PSF
+    Return as bandpass objects. '''
+
+    # Slow function of wavelength so choose 10nm sampling
+    lams = rangeQ(totalRange[0],totalRange[1],10*u.nm)
+
+    ts = moffat_theta_factor * seeingLambda(lams ,FWHM ,pivot=pivot)  #specific to Moffat PSF
+    #if ts.isscalar: ts=[ts]
+        
+    centerFrac = evaluate2Dinterp(PSFsum2D, w/ts/2., h/ts/2.)
+    totalFrac = evaluate2Dinterp(PSFsum2D, 3.*w/ts/2., h/ts/2.)
+
+    sideFrac = (totalFrac-centerFrac)/2.
+
+    throughput_slicer = {}
+    throughput_slicer['center'] = SpectralElement(Empirical1D, points=lams, lookup_table=centerFrac)
+    throughput_slicer['side'] = SpectralElement(Empirical1D, points=lams, lookup_table=sideFrac)
+
+    return throughput_slicer
+
 def profileOnDetector(channel ,slit_w ,seeing ,pivot ,lams ,spatial_range=None ,bin_spatial=1):
     ''' USE TABULATED MOFFAT INTEGRAL TO BACK OUT PIXELIZED SPATIAL PROFILES '''
     '''
