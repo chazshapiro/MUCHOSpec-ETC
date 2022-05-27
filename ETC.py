@@ -6,7 +6,10 @@
 #        MOON PHASE/POSITION, ZODIACAL LIGHT
 #        Unique FILENAMES for plots?
 #
+# TODO:  Check -SNR_pix behavior
 # TODO:  Should background variances be doubled? (sky subtraction)
+#
+# TODO:  Clean up global-ish variables?
 
 import timer
 tt = timer.Timer()
