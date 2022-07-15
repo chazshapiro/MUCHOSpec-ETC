@@ -10,13 +10,14 @@ from synphot.models import Empirical1D, Gaussian1D, Box1D
 import astropy.units as u
 import synphot.units as uu  # used in main code, not this file
 
-from ETC_config import *
+from ETC.ETC_config import *
 
-from sys import path  # path[0] is location of main script
-sourcesdir = path[0]+'/sources/'
+import ETC.path as p
+from os import path
+ETCdir = path.dirname(p.__file__)
+sourcesdir = ETCdir+'/sources/'
 #CSVdir = path[0]+'/CSV/'
-PSFsum2DFile = path[0]+'/PSFsum2D.pkl' #pre-tabulated integral of PSF over slit and side slices
-
+PSFsum2DFile = ETCdir+'/PSFsum2D.pkl' #pre-tabulated integral of PSF over slit and side slices
 
 # Check config file inputs are valid and make some derived parameters
 

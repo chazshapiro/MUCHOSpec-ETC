@@ -4,7 +4,7 @@ sourcesdir = path[0]+'/sources/'
 
 help = 'Run the Exposure Time Calculator.  Outputs are SNR, EXPTIME, wavelength range, and optional plots. '
 help += 'The model assumes that signals from 3 image slicer paths are summed for the SNR calculation.'
-epilog = 'Example minimum argument set: \n./main.py G 500 510 SNR 10 -slit .5 -seeing 1 500 -airmass 1 -skymag 21.4 -srcmodel blackbody 6000 -mag 18. -magref AB user'
+epilog = 'Example minimum argument set: \n./ETC.py G 500 510 SNR 10 -slit .5 -seeing 1 500 -airmass 1 -skymag 21.4 -srcmodel blackbody 6000 -mag 18. -magref AB user'
 
 parser = argparse.ArgumentParser(  # Make printed help text wider
   formatter_class=lambda prog: argparse.HelpFormatter(prog,max_help_position=40) ,description=help ,epilog=epilog)
@@ -31,7 +31,7 @@ def posint(value): # require > 0
 
 SNRparam = parser.add_argument_group('SNR parameters')
 
-from ETC_config import channels
+from ETC.ETC_config import channels
 help = 'Spectrograph channel used for SNR'
 parser.add_argument('channel', type=str, choices=channels ,help=help)
 
@@ -155,7 +155,7 @@ def check_inputs_add_units(args):
 	if args.tempK is not None: args.tempK*=u.K
 
 	# Check wavelength range is (min, max) and within specified channel
-	from ETC_config import channelRange
+	from ETC.ETC_config import channelRange
 	if args.wrange[0] >= args.wrange[1]: parser.error("Wavelength range must be in form [min, max]")
 	if args.wrange[0] < channelRange[args.channel][0]: parser.error("Wavelength range not in channel %s"%args.channel)
 	if args.wrange[1] > channelRange[args.channel][1]: parser.error("Wavelength range not in channel %s"%args.channel)
