@@ -62,7 +62,7 @@ parser.add_argument('-plotdiag', action='store_true', help=help)
 obsparam = parser.add_argument_group('REQUIRED Observation conditions')
 
 help = 'Slit width (arcsec)'
-obsparam.add_argument('-slit', type=posfloat, required=True, help=help)
+obsparam.add_argument('-slit', '-slitwidth', type=posfloat, required=True, help=help)
 
 help = 'Seeing FWHM (arcsec) defined at pivot wavelength (nm)'
 obsparam.add_argument('-seeing', type=posfloat, nargs=2, metavar=('SEEING','PIVOT'), required=True, help=help)

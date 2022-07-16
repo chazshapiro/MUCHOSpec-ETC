@@ -343,6 +343,10 @@ def main(etcargs):
     	plt.xlim(totalRange)
     	plt.savefig('sky.png')
 
+    # RETURN EXPTIME
+    return t
+
+
 if __name__ == "__main__":
     etcargs = parser.parse_args()
     main(etcargs)
