@@ -1,10 +1,12 @@
 import argparse
 from sys import path
-sourcesdir = path[0]+'/sources/'
+from numpy.ma import is_masked
+sourcesdir = path[0]+'/sources/'  ###?
+#from ETC.ETC_import import sourcesdir
 
 help = 'Run the Exposure Time Calculator.  Outputs are SNR, EXPTIME, wavelength range, and optional plots. '
 help += 'The model assumes that signals from 3 image slicer paths are summed for the SNR calculation.'
-epilog = 'Example minimum argument set: \n./ETC.py G 500 510 SNR 10 -slit .5 -seeing 1 500 -airmass 1 -skymag 21.4 -srcmodel blackbody 6000 -mag 18. -magref AB user'
+epilog = 'Example minimum argument set: \n./ETC_main.py G 500 510 SNR 10 -slit .5 -seeing 1 500 -airmass 1 -skymag 21.4 -srcmodel blackbody 6000 -mag 18. -magref AB user'
 
 parser = argparse.ArgumentParser(  # Make printed help text wider
   formatter_class=lambda prog: argparse.HelpFormatter(prog,max_help_position=40) ,description=help ,epilog=epilog)
@@ -96,6 +98,16 @@ sourceparam_add.add_argument('-E_BV', type=float, default=0., help=help)
 help = 'Extinction model; default="mwavg" (Diffuse Milky Way, R_V=3.1)'
 sourceparam_add.add_argument('-extmodel', type=str, default='mwavg', help=help)
 
+# ETC parameter summary for external modules
+etc_args = ['channel', 'wrange', 'SNR'] # Order is important
+etc_kwargs = ['slitwidth', 'airmass', 'skymag','seeing', 'mag', 'magref', 'srcmodel']
+etc_optkwargs = ['binning', 'SNR_pix', 'noslicer', 'z', 'E_BV', 'extmodel']
+
+def formETCcommmand(row):
+    '''Form the ETC command line string from a dictionary-like object (columns in the input table)'''
+    cmd = '%s %s SNR %s ' % tuple([row[k] for k in etc_args])
+    cmd_kwargs = [ '-%s %s'%(k,row[k]) for k in etc_kwargs+etc_optkwargs if not is_masked(row[k]) ]
+    return cmd + ' '.join(cmd_kwargs)
 
 # Check that inputs are valid and append units where applicable
 def check_inputs_add_units(args):

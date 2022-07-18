@@ -14,11 +14,12 @@
 # tt = timer.Timer()
 # tt.start()  # Measures time until tt.stop()
 
+from ETC.ETC_config import *
 from ETC.ETC_arguments import *
 from ETC.ETC_import import *
 from numpy import array, arange, vstack, log
 
-def main(etcargs):
+def main(etcargs ,quiet=False):
     args = etcargs
     check_inputs_add_units(args)
 
@@ -45,7 +46,8 @@ def main(etcargs):
     bc = binCenters[args.channel]
     closest_bin_i = [abs(bc-wr).argmin() for wr in args.wrange]
     target_slice = slice(closest_bin_i[0],closest_bin_i[1]+1,None)
-    print( args.wrange, "-->", bc[closest_bin_i[0]:closest_bin_i[1]+1:closest_bin_i[1]-closest_bin_i[0]] )
+    if not quiet:
+        print( args.wrange, "-->", bc[closest_bin_i[0]:closest_bin_i[1]+1:closest_bin_i[1]-closest_bin_i[0]] )
 
     # Only bother with wavelength range used for SNR; negligible time saved
     #if ~args.plotSNR and ~args.plotdiag: binCenters[args.channel] = bc[target_slice]
@@ -290,13 +292,14 @@ def main(etcargs):
 
         ans = optimize.root_scalar(SNRfunc ,x0=1 ,x1=1000)
         t = (ans.root).astype('float16')*u.s
-        #print(ans)
-        print('SNR=%s   exptime=%s'%(SNR_target, t))
+        if not quiet:
+            print('SNR=%s   exptime=%s'%(SNR_target, t))
         
     else:
         t = exptime
         SNR_t = SNR_from_exptime(t, wave_range=args.wrange, ch=args.channel ,Np=args.SNR_pix).astype('float16')
-        print('SNR=%s   exptime=%s'%(SNR_t, t))
+        if not quiet:
+            print('SNR=%s   exptime=%s'%(SNR_t, t))
         
     # END MAIN CALCULATION
     # tt.stop()
@@ -349,4 +352,4 @@ def main(etcargs):
 
 if __name__ == "__main__":
     etcargs = parser.parse_args()
-    main(etcargs)
+    main(etcargs ,quiet=False)
