@@ -20,8 +20,16 @@ from ETC.ETC_import import *
 from numpy import array, arange, vstack, log
 
 def main(etcargs ,quiet=False):
+    from ETC.ETC_config import channels
     args = etcargs
-    check_inputs_add_units(args)
+
+    # Check for valid inputs
+    # If running as command line script, exit gracefully from a problem, otherwise raise an exception
+    try:
+        check_inputs_add_units(args)
+    except Exception as e:
+        if __name__ == "__main__": parser.error(e)
+        else: raise e
 
     # Unpack SNR or EXPTIME and set the other to None
     if args.ETCmode == 'SNR':
@@ -290,8 +298,9 @@ def main(etcargs ,quiet=False):
             #return log( SNR_from_exptime(10**t_sec*u.s, wave_range=args.wrange, ch=args.channel ,method='peak') / SNR_target)
             return SNR_from_exptime(t_sec*u.s, wave_range=args.wrange, ch=args.channel ,Np=args.SNR_pix) - SNR_target
 
-        ans = optimize.root_scalar(SNRfunc ,x0=1 ,x1=1000)
+        ans = optimize.root_scalar(SNRfunc ,x0=1 ,x1=100)  ### Very bright stars may not converge here
         t = (ans.root).astype('float16')*u.s
+        # print(ans)
         if not quiet:
             print('SNR=%s   exptime=%s'%(SNR_target, t))
         

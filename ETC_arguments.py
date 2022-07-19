@@ -1,8 +1,11 @@
 import argparse
 from sys import path
 from numpy.ma import is_masked
-sourcesdir = path[0]+'/sources/'  ###?
-#from ETC.ETC_import import sourcesdir
+from ETC.ETC_import import sourcesdir
+
+# Hacks to avoid exiting the program when there's a parser error
+class ArgumentParserError(Exception): pass
+def raiseerror(self, message): raise ArgumentParserError(message)
 
 help = 'Run the Exposure Time Calculator.  Outputs are SNR, EXPTIME, wavelength range, and optional plots. '
 help += 'The model assumes that signals from 3 image slicer paths are summed for the SNR calculation.'
@@ -101,13 +104,20 @@ sourceparam_add.add_argument('-extmodel', type=str, default='mwavg', help=help)
 # ETC parameter summary for external modules
 etc_args = ['channel', 'wrange', 'SNR'] # Order is important
 etc_kwargs = ['slitwidth', 'airmass', 'skymag','seeing', 'mag', 'magref', 'srcmodel']
-etc_optkwargs = ['binning', 'SNR_pix', 'noslicer', 'z', 'E_BV', 'extmodel']
+etc_optkwargs = ['binning', 'SNR_pix', 'z', 'E_BV', 'extmodel']  ### -noslicer takes no argument in ETC command
 
-def formETCcommmand(row):
-    '''Form the ETC command line string from a dictionary-like object (columns in the input table)'''
-    cmd = '%s %s SNR %s ' % tuple([row[k] for k in etc_args])
-    cmd_kwargs = [ '-%s %s'%(k,row[k]) for k in etc_kwargs+etc_optkwargs if not is_masked(row[k]) ]
-    return cmd + ' '.join(cmd_kwargs)
+def formETCcommmand(row):  ### Maybe make command as list not a big string
+	'''Form the ETC command line string from an astropy table row'''
+	cmd = '%s %s SNR %s ' % tuple([row[k] for k in etc_args])
+	cmd_kwargs = [ '-%s %s'%(k,row[k]) for k in etc_kwargs if not is_masked(row[k]) ]
+
+	# These columns are optional, so first check if they exist
+	cmd_optkwargs = []
+	for k in etc_optkwargs:
+		if k in row.colnames:
+			if not is_masked(row[k]):
+				cmd_optkwargs.append('-%s %s'%(k,row[k]))
+	return cmd + ' '.join(cmd_kwargs+cmd_optkwargs)
 
 # Check that inputs are valid and append units where applicable
 def check_inputs_add_units(args):
@@ -131,7 +141,7 @@ def check_inputs_add_units(args):
 				for name in files:
 					if name == args.srctemp+".fits":
 						dir_and_name = '/'.join(joinpath(root, name).split('/')[-2:])
-						print("Found template: "+dir_and_name)
+						#print("Found template: "+dir_and_name)
 						args.srctemp = joinpath(root, name)
 						foundTemplate = True
 						continue
@@ -164,7 +174,7 @@ def check_inputs_add_units(args):
 	if args.ETCmode == 'EXPTIME': args.ETCfixed *= u.s
 	args.seeing[0] *= u.arcsec
 	args.seeing[1] *= u.nm
-	if args.tempK is not None: args.tempK*=u.K
+	if hasattr(args, 'tempK'): args.tempK*=u.K
 
 	# Check wavelength range is (min, max) and within specified channel
 	from ETC.ETC_config import channelRange
