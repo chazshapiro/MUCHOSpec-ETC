@@ -69,8 +69,10 @@ def main(etcargs ,quiet=False):
         from synphot.models import BlackBodyNorm1D
         label = 'blackbody '+str(args.tempK)
         sourceSpectrum = SourceSpectrum(BlackBodyNorm1D, temperature=args.tempK)
-    #elif args.srcmodel.lower() == 'constant':
-    #from astropy.modeling.models import Const1D    
+    elif args.srcmodel[0].lower() == 'constant':
+        from astropy.modeling.models import Const1D
+        label = 'constant'
+        sourceSpectrum = SourceSpectrum(Const1D)
 
     else: raise Exception('Invalid source model')
 
@@ -292,14 +294,21 @@ def main(etcargs ,quiet=False):
     if SNR_target is not None:
         from scipy import optimize
 
-        #TODO: Maybe find root in log-log space where SNR(t) is ~linear; doesn't save much time
-
+        # Find root in log-log space where SNR(t) is ~linear; doesn't save much time but more likely to converge
         def SNRfunc(t_sec):
-            #return log( SNR_from_exptime(10**t_sec*u.s, wave_range=args.wrange, ch=args.channel ,method='peak') / SNR_target)
-            return SNR_from_exptime(t_sec*u.s, wave_range=args.wrange, ch=args.channel ,Np=args.SNR_pix) - SNR_target
+            return log( SNR_from_exptime(10**t_sec*u.s, wave_range=args.wrange, ch=args.channel ,Np=args.SNR_pix) / SNR_target)
+            # return SNR_from_exptime(t_sec*u.s, wave_range=args.wrange, ch=args.channel ,Np=args.SNR_pix) - SNR_target
 
-        ans = optimize.root_scalar(SNRfunc ,x0=1 ,x1=100)  ### Very bright stars may not converge here
-        t = (ans.root).astype('float16')*u.s
+        #ans = optimize.root_scalar(SNRfunc ,x0=1 ,x1=100)  ### Very bright stars may not converge here; try log-log
+        ans = optimize.root_scalar(SNRfunc ,x0=0 ,x1=3)
+
+        # Check for converged answer
+        if ans.converged:
+            # t = (ans.root).astype('float16')*u.s
+            t = (10.**(ans.root).astype('float16'))*u.s
+        else:
+            raise RuntimeError('ETC calculation did not converge')
+
         # print(ans)
         if not quiet:
             print('SNR=%s   exptime=%s'%(SNR_target, t))
@@ -357,6 +366,22 @@ def main(etcargs ,quiet=False):
 
     # RETURN EXPTIME
     return t
+
+def runETC(row):
+    '''Convert an astropy table row into an ETC command and run the ETC to get an exposure time'''
+    cmd = formETCcommmand(row)
+    x = parser.parse_args(cmd.split())  ### Change this parser.error ? Should be OK since we check ETC cols at the beginning
+    t = main(x ,quiet=True)  # Unitful (s)
+    assert isinstance(t,u.Quantity), "Got invalid result from ETC"
+    return t
+
+def checkETCargs(row):
+    '''Convert an astropy table row into an ETC command and check it using the argument parser'''
+    cmd = formETCcommmand(row)
+    #print(cmd)
+    x = parser.parse_args(cmd.split())
+    check_inputs_add_units(x)
+    return True
 
 
 if __name__ == "__main__":

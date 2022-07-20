@@ -3,9 +3,12 @@ from sys import path
 from numpy.ma import is_masked
 from ETC.ETC_import import sourcesdir
 
-# Hacks to avoid exiting the program when there's a parser error
+# Hack to avoid exiting the program when there's a parser error
 class ArgumentParserError(Exception): pass
 def raiseerror(self, message): raise ArgumentParserError(message)
+def noQuitETCparser():
+	'''Change behavior of ArgumentParser to raise an exception instead of quitting on an error'''
+	argparse.ArgumentParser.error = classmethod(raiseerror)
 
 help = 'Run the Exposure Time Calculator.  Outputs are SNR, EXPTIME, wavelength range, and optional plots. '
 help += 'The model assumes that signals from 3 image slicer paths are summed for the SNR calculation.'
@@ -122,13 +125,17 @@ def formETCcommmand(row):  ### Maybe make command as list not a big string
 # Check that inputs are valid and append units where applicable
 def check_inputs_add_units(args):
 
-	if len(args.srcmodel) < 2: parser.error('-srcmodel requires at least 2 arguments')
+	srcmodel = args.srcmodel[0]
 
-	choices = ['blackbody','template']
-	if args.srcmodel[0].lower() not in choices: parser.error('-srcmodel first argument must be in '+str(choices))
+	# Number of expected arguments after command line option
+	choices = {'blackbody':2,'template':2,'constant':1}
+
+	if srcmodel.lower() not in choices: parser.error('-srcmodel first argument must be in '+str(choices.keys()))
+
+	if len(args.srcmodel) != choices[srcmodel]: parser.error('-srcmodel "%s" requires exactly %i arguments'%(srcmodel,choices[srcmodel]))
 
 	# Check for valid template if using a template model
-	if args.srcmodel[0].lower()=='template':
+	if srcmodel.lower()=='template':
 
 		args.srctemp = args.srcmodel[1]  # copy template name to new attribute
 
@@ -148,8 +155,8 @@ def check_inputs_add_units(args):
 
 		if not foundTemplate: parser.error("Could not find source template: "+args.srctemp+'.fits')
 
-	# Check for temperature if using blackbody model
-	if args.srcmodel[0].lower()=='blackbody':
+	# Add/check temperature if using blackbody model
+	if srcmodel.lower()=='blackbody':
 		try: args.tempK = posfloat(args.srcmodel[1])  # copy blackbody temperature to new attribute
 		except: parser.error("-srcmodel blackbody TEMPK requires TEMPK to be a positive float")
 
