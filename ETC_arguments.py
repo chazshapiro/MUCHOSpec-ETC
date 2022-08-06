@@ -186,6 +186,8 @@ def check_inputs_add_units(args):
 	# Check wavelength range is (min, max) and within specified channel
 	from ETC.ETC_config import channelRange
 	if args.wrange[0] >= args.wrange[1]: parser.error("Wavelength range must be in form [min, max]")
-	if args.wrange[0] < channelRange[args.channel][0]: parser.error("Wavelength range not in channel %s"%args.channel)
-	if args.wrange[1] > channelRange[args.channel][1]: parser.error("Wavelength range not in channel %s"%args.channel)
+	if args.wrange[0] < channelRange[args.channel][0]:
+		parser.error("Wavelength range %s not in channel %s"%(str(args.wrange),args.channel))
+	if args.wrange[1] > channelRange[args.channel][1]:
+		parser.error("Wavelength range %s not in channel %s"%(str(args.wrange),args.channel))
 
