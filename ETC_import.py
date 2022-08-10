@@ -171,6 +171,21 @@ def Moffat_scalefree(x,y ,beta=moffat_beta):
 PSFsum2D = pload(open(PSFsum2DFile ,'rb'))
 from scipy.interpolate import dfitpack
 
+from scipy.special import gamma
+def sharpess_scalefree(theta, x=0., beta=moffat_beta):
+    ''' 1D sharpness of seeing-limited PSF (Moffat) along spatial direction
+    x = horizontal offset; changes y projection for e.g. side image slice
+    '''
+
+    # Normalization of PSF
+    integral1 = 3.14159**.5 * theta**(2*beta) * (theta**2+x**2)**(0.5-beta) * gamma(beta-0.5) / gamma(beta)
+
+    # Integral over PSF squared (sharpness)
+    integral2 = 3.14159**.5 * theta**(4*beta) * (theta**2+x**2)**(0.5-2*beta) * gamma(2*beta-0.5) / gamma(2*beta)
+
+    return integral2/integral1**2
+
+
 def evaluate2Dinterp(f, x, y):
     '''Trick for quickly evaluating 2D interpolation on (x,y) pairs, not a 2D grid'''
     # https://stackoverflow.com/questions/47087109/evaluate-the-output-from-scipy-2d-interpolation-along-a-curve
@@ -188,9 +203,11 @@ def slitFractions(lam, w ,h ,FWHM ,pivot=500.*u.nm):
     sideFrac = (totalFrac-centerFrac)/2.
     return {'total':totalFrac, 'center':centerFrac, 'side':sideFrac}
 
-def slitEfficiency(w ,h ,FWHM ,pivot=500.*u.nm):
+def slitEfficiency(w ,h ,FWHM ,pivot=500.*u.nm ,optics=None):
     '''Compute fraction of PSF passing through slit and side slices, assuming Moffat PSF
-    Return as bandpass objects. '''
+    Return as bandpass objects. 
+
+    optics = Bandpass object for slicer side optics'''
 
     # Slow function of wavelength so choose 10nm sampling
     lams = rangeQ(totalRange[0],totalRange[1],10*u.nm)
@@ -203,9 +220,14 @@ def slitEfficiency(w ,h ,FWHM ,pivot=500.*u.nm):
 
     sideFrac = (totalFrac-centerFrac)/2.
 
+    if optics is not None:
+        sideFrac *= optics(lams).value  # Bandpass object is dimensionless Quantity
+        totalFrac = centerFrac + sideFrac*2
+
     throughput_slicer = {}
     throughput_slicer['center'] = SpectralElement(Empirical1D, points=lams, lookup_table=centerFrac)
     throughput_slicer['side'] = SpectralElement(Empirical1D, points=lams, lookup_table=sideFrac)
+    throughput_slicer['total'] = SpectralElement(Empirical1D, points=lams, lookup_table=totalFrac)
 
     return throughput_slicer
 
