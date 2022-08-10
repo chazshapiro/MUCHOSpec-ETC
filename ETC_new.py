@@ -249,7 +249,7 @@ def main(etcargs ,quiet=False):
             for sigpath in ['center','side']:
 
                 sharpness = 2 * (profile_slit[k][sigpath]**2).sum(0)
-                print(sigpath, '1./sharpness:', 1./sharpness[closest_bin_i[0]])
+                # print(sigpath, '1./sharpness:', 1./sharpness[closest_bin_i[0]])
 
                 SIGNAL = signal[sigpath][k]
                 NOISE2 = SIGNAL + (bgvar[sigpath][k])/sharpness  ### Doesn't account for side slicer optics
@@ -257,7 +257,7 @@ def main(etcargs ,quiet=False):
 
             # print('center', SNR2[k]['center'][closest_bin_i[0]]**.5, 'side', SNR2[k]['side'][closest_bin_i[0]]**.5)
             SS = not args.noslicer
-            SNR[k] = ( SNR2[k]['center'] + SS*2*SNR2[k]['side'] )**.5
+            SNR[k] = ( SNR2[k]['center'] + SS*2*SNR2[k]['side'] ).value**.5
 
         if wave_range is not None:        return (SNR[ch][closest_bin_i[0]:closest_bin_i[1]+1]).mean()
         elif ch is not None:              return SNR[ch]
@@ -297,8 +297,45 @@ def main(etcargs ,quiet=False):
     # END MAIN CALCULATION
     # tt.stop()
 
-    import pdb
-    pdb.set_trace()
+    # Plot SNR vs. wavelength if requested
+    if args.plotSNR or args.plotdiag:
+
+        import matplotlib.pyplot as plt
+        #matplotlib.rcParams.update({'font.size': 14})
+        from astropy.visualization import astropy_mpl_style, quantity_support
+        plt.style.use(astropy_mpl_style)
+        quantity_support()
+
+        SNR1 = SNR_from_exptime(t)
+
+        fig, ax = plt.subplots(figsize=(15,4))
+
+        for k in channels:
+            ax.plot(binCenters[k], SNR1[k] ,color=channelColor[k] ,label=k)
+
+        plt.ylabel('SNR / wavelength bin')
+        plt.legend()
+        ax.axvspan(args.wrange[0], args.wrange[1], alpha=0.2, color='grey') # shade user range
+        plt.title('EXPTIME = '+str(t))
+        plt.savefig('plotSNR.png')
+
+    return t
+
+def runETC(row):
+    '''Convert an astropy table row into an ETC command and run the ETC to get an exposure time'''
+    cmd = formETCcommmand(row)
+    x = parser.parse_args(cmd.split())  ### Change this parser.error ? Should be OK since we check ETC cols at the beginning
+    t = main(x ,quiet=True)  # Unitful (s)
+    assert isinstance(t,u.Quantity), "Got invalid result from ETC"
+    return t
+
+def checkETCargs(row):
+    '''Convert an astropy table row into an ETC command and check it using the argument parser'''
+    cmd = formETCcommmand(row)
+    #print(cmd)
+    x = parser.parse_args(cmd.split())
+    check_inputs_add_units(x)
+    return True
 
 if __name__ == "__main__":
     etcargs = parser.parse_args()
