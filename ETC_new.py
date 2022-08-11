@@ -9,6 +9,8 @@
 # Change -SNR_pix behavior
 # Clean up global-ish variables?
 # Error handling
+# Should background variances be 2x to acount for sky subtraction?
+
 
 # import timer
 # tt = timer.Timer()
@@ -18,6 +20,7 @@ from ETC.ETC_config import *
 from ETC.ETC_arguments import *
 from ETC.ETC_import import *
 from numpy import array, arange, vstack, log
+from copy import deepcopy
 
 def main(etcargs ,quiet=False):
     from ETC.ETC_config import channels
@@ -145,58 +148,71 @@ def main(etcargs ,quiet=False):
     for k in channels:
         TP[k] = throughput_spectrograph[k]*QE[k]*throughput_telescope
 
+    if args.noslicer: slicer_paths = ['center']
+    else:             slicer_paths = ['center','side']
+
+    '''  ################################### '''
     '''  ALL SLIT DEPENDENCE BELOW THIS LINE '''
+    '''  ################################### '''
+
+    def SSSfunc(slitw):
 
     # Compute transmission thru slit/slicer sections as function of slit width and seeing(wavelength)
-    # Assumes seeing-limited PSF
+        # Assumes seeing-limited PSF
 
-    # Combine slit fractions arrays with Optics to make throughput elements
-    throughput_slicer = slitEfficiency(args.slit ,slit_h ,args.seeing[0] ,pivot=args.seeing[1] ,optics=throughput_slicerOptics)
+        # Combine slit fractions arrays with Optics to make throughput elements
+        throughput_slicer = slitEfficiency(slitw ,slit_h ,args.seeing[0] ,pivot=args.seeing[1] ,optics=throughput_slicerOptics)
 
-    # Compute pixelized spatial profiles for a flat spectrum
-    # Multiplying spectra by these profiles "distributes" counts over pixels in spatial direction
-    # THIS IS ONLY HALF THE (symmetric) PROFILE, so it is normalized to 0.5 #
-    # profile_slit[k][lightpath] sums to 0.5 in each w bin and each path individually
+        # Compute pixelized spatial profiles for a flat spectrum
+        # Multiplying spectra by these profiles "distributes" counts over pixels in spatial direction
+        # THIS IS ONLY HALF THE (symmetric) PROFILE, so it is normalized to 0.5
+        # profile_slit[k][lightpath] sums to 0.5 in each w bin and each path individually
 
-    profile_slit = {}
+        profile_slit = {}
+        sharpness = {}
+        for k in channels:
+            profile_slit[k] = profileOnDetector(k ,slitw ,args.seeing[0] ,args.seeing[1] ,binCenters[k]
+                                                ,spatial_range=None ,bin_spatial=args.binning[1])
 
-    for k in channels:
-        profile_slit[k] = profileOnDetector(k ,args.slit ,args.seeing[0] ,args.seeing[1] ,binCenters[k]
-                                            ,spatial_range=None ,bin_spatial=args.binning[1])
+            sharpness[k]={}
+            for s in slicer_paths:
+                sharpness[k][s] = 2 * (profile_slit[k][s]**2).sum(0)
 
-    # Multiply source spectrum by all throughputs, atmosphere, slit loss, and convolve with LSF
-    # These are the flux densities at the focal plane array (FPA)
-    # Side slice throughputs are for a SINGLE side slice
+        # Multiply source spectrum by all throughputs, atmosphere, slit loss, and convolve with LSF
+        # These are the flux densities at the focal plane array (FPA)
+        # Side slice throughputs are for a SINGLE side slice
 
-    sourceSpectrumFPA={}  #Total flux summed over all spatial pixels and used slices
-    skySpectrumFPA={}     #Flux PER spatial pixel, depends on slice bc of slicer optics
+        sourceSpectrumFPA={}  #Total flux summed over all spatial pixels and used slices
+        skySpectrumFPA={}     #Flux PER spatial pixel, depends on slice bc of slicer optics
 
-    # background flux/pixel ~ slit_width * spatial_pixel_height; we'll scale sky flux by this later
-    bg_pix_area={}
-    for k in channels:
-        bg_pix_area[k] = args.slit *(1*u.pix).to('arcsec' ,equivalencies=plate_scale[k])
-        # Make dimensionless in units of arcsec^2
-        bg_pix_area[k] = (bg_pix_area[k]/u.arcsec**2).to(u.dimensionless_unscaled).value
+        # background flux/pixel ~ slit_width * spatial_pixel_height; we'll scale sky flux by this later
+        bg_pix_area={}
+        for k in channels:
+            bg_pix_area[k] = slitw *(1*u.pix).to('arcsec' ,equivalencies=plate_scale[k])
+            # Make dimensionless in units of arcsec^2
+            bg_pix_area[k] = (bg_pix_area[k]/u.arcsec**2).to(u.dimensionless_unscaled).value
 
-    for k in channels:
-        sourceSpectrumFPA[k]={}
-        for sigpath in ['center','side']:
-            spec = sourceSpectrum * throughput_atm * TP[k] * throughput_slicer[sigpath]
-            sourceSpectrumFPA[k][sigpath] = convolveLSF(spec, args.slit ,args.seeing[0] ,k ,pivot=args.seeing[1])
+            sourceSpectrumFPA[k]={}
+            skySpectrumFPA[k]={}    
 
-        # Doesn't include atmosphere or slitloss for sky flux
-        # Scale sky flux by effective area: slit_width*pixel_height
-        skySpectrumFPA[k]={}    
-        for lightpath in ['center','side']:
-            spec = skySpec * TP[k] * bg_pix_area[k]
-            if lightpath == 'side': spec *= throughput_slicerOptics
-            skySpectrumFPA[k][lightpath] = convolveLSF(spec, args.slit ,args.seeing[0] ,k ,pivot=args.seeing[1])
+            for s in slicer_paths:
+                spec = sourceSpectrum * throughput_atm * TP[k] * throughput_slicer[s]
+                sourceSpectrumFPA[k][s] = convolveLSF(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1])
+
+                # Doesn't include atmosphere or slitloss for sky flux
+                # Scale sky flux by effective area: slit_width*pixel_height
+                spec = skySpec * TP[k] * bg_pix_area[k]
+                if s == 'side': spec *= throughput_slicerOptics
+                skySpectrumFPA[k][s] = convolveLSF(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1])
+
+        return sourceSpectrumFPA, skySpectrumFPA, sharpness
 
     # Create workhorse function for solving for EXPTIME
-    def SNR_from_exptime(exptime, wave_range=None, ch=None ,Np=None):
+    def SNR_from_exptime(exptime, slitw, SSS=None, wave_range=None, ch=None ,Np=None):
         '''Compute SNR from inputs'''
         '''
         exptime: exposure time (unitful)
+        slitw: slit width (unitful)
         wave_range: compute average SNR for this wavelength range (unitful), requires ch
         ch: compute SNR only for this channel
         Np: Number of spatial pixels on either side of profile center to estimate SNR;
@@ -207,6 +223,9 @@ def main(etcargs ,quiet=False):
             ch, no wave_range --> SNR/wavelength bin for whole channel
             no keywords --> dictionary of SNR/wavelength bin for all channels
         '''
+
+        if SSS is None: SSS = SSSfunc(slitw)
+        sourceSpectrumFPA, skySpectrumFPA, sharpness = SSS
         
         # Find the bins where the target wavelengths live
         if wave_range is not None:
@@ -222,56 +241,56 @@ def main(etcargs ,quiet=False):
 
         signal={}  #Total fluence (counts) summed over all spatial pixels
         bgvar={}   #Variance (counts) PER spatial pixel read
-
-        for sigpath in ['center','side']:
-            signal[sigpath] = {}
-            for k in chanlist:
-                signal[sigpath][k] = sourceSpectrumFPA[k][sigpath](binCenters[k] 
-                                        ,flux_unit='count' ,area=telescope_Area)/u.s*exptime
-
-            # TODO: Should background variances be 2x to acount for sky subtraction?
-            bgvar[sigpath] = {}
-            for k in chanlist:
-                bgvar[sigpath][k] = skySpectrumFPA[k][sigpath](binCenters[k] 
-                                        ,flux_unit='count' ,area=telescope_Area)/u.s*exptime
-                bgvar[sigpath][k] += darkcurrent[k]*exptime*u.pix 
-
-                bgvar[sigpath][k] *= args.binning[1]  #account for more background per pixel if binning
-
-                bgvar[sigpath][k] += (readnoise[k]*u.pix)**2/u.ct  #read noise per read pixel is unchanged
-                
-        # Combine signal and noise to SNR
-        SNR2 = {}
+        SNR2={}
         SNR={}
+
         for k in chanlist:
-                
+            signal[k] = {}
+            bgvar[k] = {}
             SNR2[k] = {}
-            for sigpath in ['center','side']:
 
-                sharpness = 2 * (profile_slit[k][sigpath]**2).sum(0)
-                # print(sigpath, '1./sharpness:', 1./sharpness[closest_bin_i[0]])
+            for s in slicer_paths:
+                ### depends on slit
+                signal[k][s] = sourceSpectrumFPA[k][s](binCenters[k] ,flux_unit='count' ,area=telescope_Area) \
+                                /u.s*exptime 
+                ### depends on slit
+                bgvar[k][s] = skySpectrumFPA[k][s](binCenters[k] ,flux_unit='count' ,area=telescope_Area) \
+                                /u.s*exptime
+                bgvar[k][s] += darkcurrent[k]*exptime*u.pix 
+                bgvar[k][s] *= args.binning[1]  #account for more background per pixel if binning
+                bgvar[k][s] += (readnoise[k]*u.pix)**2/u.ct  #read noise per read pixel is unchanged
+                                
+                SIGNAL = signal[k][s]
+                ### depends on slit
+                NOISE2 = SIGNAL + bgvar[k][s]/sharpness[k][s]
+                SNR2[k][s] = (SIGNAL**2/NOISE2 /u.ct).value  #**.5/u.ct**.5
 
-                SIGNAL = signal[sigpath][k]
-                NOISE2 = SIGNAL + (bgvar[sigpath][k])/sharpness  ### Doesn't account for side slicer optics
-                SNR2[k][sigpath] = SIGNAL**2/NOISE2 /u.ct  #**.5/u.ct**.5
-
-            # print('center', SNR2[k]['center'][closest_bin_i[0]]**.5, 'side', SNR2[k]['side'][closest_bin_i[0]]**.5)
-            SS = not args.noslicer
-            SNR[k] = ( SNR2[k]['center'] + SS*2*SNR2[k]['side'] ).value**.5
+            SNR[k] = deepcopy(SNR2[k]['center'])
+            if not args.noslicer: SNR[k] += 2*SNR2[k]['side']
+            SNR[k] = SNR[k]**0.5
+            # print( SNR[k][closest_bin_i[0]:closest_bin_i[1]+1].mean(), [(SNR2[k][s]**.5)[closest_bin_i[0]:closest_bin_i[1]+1].mean() for s in slicer_paths] ) 
 
         if wave_range is not None:        return (SNR[ch][closest_bin_i[0]:closest_bin_i[1]+1]).mean()
         elif ch is not None:              return SNR[ch]
         else:                             return SNR
 
 
-    # Solve for exptime or SNR depending on what is fixed
+    # Solve for exptime or SNR and maybe slitw depending on what is fixed
 
-    if SNR_target is not None:
+    if (exptime is not None) and (args.slit is not None):
+        t = exptime
+        SSS = SSSfunc(args.slit)
+        SNR_result = SNR_from_exptime(t, 0, SSS=SSS, wave_range=args.wrange, ch=args.channel ,Np=args.SNR_pix).astype('float16')
+
+    elif (exptime is None) and (args.slit is not None):
         from scipy import optimize
+
+        SSS = SSSfunc(args.slit)
+        SNR_result = SNR_target
 
         # Find root in log-log space where SNR(t) is ~linear; doesn't save much time but more likely to converge
         def SNRfunc(t_sec):
-            return log( SNR_from_exptime(10**t_sec*u.s, wave_range=args.wrange, ch=args.channel ,Np=args.SNR_pix) / SNR_target)
+            return log( SNR_from_exptime(10**t_sec*u.s, 0, SSS=SSS, wave_range=args.wrange, ch=args.channel ,Np=args.SNR_pix) / SNR_target)
             # return SNR_from_exptime(t_sec*u.s, wave_range=args.wrange, ch=args.channel ,Np=args.SNR_pix) - SNR_target
 
         #ans = optimize.root_scalar(SNRfunc ,x0=1 ,x1=100)  ### Very bright stars may not converge here; try log-log
@@ -284,16 +303,47 @@ def main(etcargs ,quiet=False):
         else:
             raise RuntimeError('ETC calculation did not converge')
 
-        # print(ans)
-        if not quiet:
-            print('SNR=%s   exptime=%s'%(SNR_target, t))
-        
-    else:
+    elif (exptime is not None) and (args.slit is None):
+        from scipy import optimize
         t = exptime
-        SNR_t = SNR_from_exptime(t, wave_range=args.wrange, ch=args.channel ,Np=args.SNR_pix).astype('float16')
-        if not quiet:
-            print('SNR=%s   exptime=%s'%(SNR_t, t))
+
+        # Set max slitwidth to 97%  efficiency (3% slit loss)
+        def efffunc(slitw_arcsec):
+            eff = slitEfficiency(slitw_arcsec*u.arcsec ,slit_h ,args.seeing[0] ,pivot=args.seeing[1] ,optics=throughput_slicerOptics)
+            if args.noslicer: eff = eff['center']
+            else:             eff = eff['total']
+            return eff(args.wrange).mean() - 0.97
+
+        ans = optimize.root_scalar(efffunc ,bracket=tuple(slit_w_range.to('arcsec').value) ,x0=args.seeing[0].to('arcsec').value)
+        # Check for converged answer
+        if ans.converged:
+            slitw_max_arcsec = ans.root # unitless, in arcsec
+        else:
+            raise RuntimeError('Max slit efficiency calculation did not converge')
+
+        # Solve for 'best' slitwidth (maximize SNR)
+        def SNRfunc(slitw_arcsec):
+            print(slitw_arcsec)
+            ret = SNR_from_exptime(t, slitw_arcsec*u.arcsec, wave_range=args.wrange, ch=args.channel ,Np=args.SNR_pix)
+            return -ret
+
+        ans = optimize.minimize_scalar(SNRfunc ,tol=0.02 ,bounds=slit_w_range.value ,method='bounded')
+        slitw_best_arcsec = ans.x
+
+        if slitw_best_arcsec <= slitw_max_arcsec:
+            SNR_result = -ans.fun
+            slitw_result = slitw_best_arcsec*u.arcsec
+        else:
+            SNR_result = -SNRfunc(slitw_max_arcsec)
+            slitw_result = slitw_max_arcsec*u.arcsec
+
+        print('SLIT=',slitw_result.round(2), 'max',slitw_max_arcsec, 'best',slitw_best_arcsec)
+
+
+    if not quiet:
+        print('SNR=%s   exptime=%s'%(SNR_result, t))
         
+
     # END MAIN CALCULATION
     # tt.stop()
 

@@ -176,7 +176,7 @@ def check_inputs_add_units(args):
 
 	# Append units to inputs where applicable
 	import astropy.units as u
-	args.slit *= u.arcsec
+	if args.slit is not None: args.slit *= u.arcsec
 	args.wrange *= u.nm
 	if args.ETCmode == 'EXPTIME': args.ETCfixed *= u.s
 	args.seeing[0] *= u.arcsec
