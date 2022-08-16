@@ -9,6 +9,8 @@ from synphot import SourceSpectrum, SpectralElement  #TODO <<---- SLOW IMPORT!
 from synphot.models import Empirical1D, Gaussian1D, Box1D
 import astropy.units as u
 import synphot.units as uu  # used in main code, not this file
+from functools import cache
+from copy import deepcopy
 
 from ETC.ETC_config import *
 
@@ -48,6 +50,16 @@ telescope_Area = (1. - Obscuration**2)*pi*(telescope_D/2.)**2 #Collecting area
 
 # Function definitions
 
+@cache  # clever, but saves only ms
+def makeBinCenters(binspec, chanlist=channels):
+    '''Compute the center wavelength of each pixel along the spectral direction, accounting for binning'''
+    binCenters={}
+    for k in chanlist:
+        lambdamin,lambdamax = channelRange[k]
+        binCenters[k] = rangeQ(lambdamin,lambdamax, binspec*(lambdamax-lambdamin)/Npix_dispers[k])
+        # dispersion_scale[k]=u.pixel_scale( args.binning[0]*(lambdamax-lambdamin)/(Npix_dispers[k]*u.pix) )
+    return binCenters
+
 def rangeQ(q0, q1, dq=None):
     '''Construct an evenly spaced array using unitful quantities'''
     
@@ -72,14 +84,61 @@ def LoadCSVSpec(filename ,CSVdir=CSVdir):
     '''Helper to load throughput/spectrum element from CSV file'''
     return SpectralElement.from_file(CSVdir+filename ,wave_unit=default_waveunit)
 
-# Something to try...
-#import functools
-#@functools.lru_cache(maxsize=128)
 def seeingLambda(w ,FWHM ,pivot=500.*u.nm):
     '''Seeing law scaled to wavelength'''
     assert u.get_physical_type(w) == 'length', "w must have units of length"
     #pivot = 500.*u.nm
     return FWHM*(w/pivot)**0.2
+
+def makeSource(args):
+    ''' Load the source model, mix with astrophysics, normalize .
+    Returns a spectrum object for the source at the top of the atmosphere
+    '''
+    # Load source spectrum model
+    if args.srcmodel[0].lower() == 'template':
+        label = args.srctemp.split('/')[-1]  #used for plot labels
+        sourceSpectrum = SourceSpectrum.from_file(args.srctemp)
+    elif args.srcmodel[0].lower() == 'blackbody':
+        from synphot.models import BlackBodyNorm1D
+        label = 'blackbody '+str(args.tempK)
+        sourceSpectrum = SourceSpectrum(BlackBodyNorm1D, temperature=args.tempK)
+    elif args.srcmodel[0].lower() == 'constant':
+        from astropy.modeling.models import Const1D
+        label = 'constant'
+        sourceSpectrum = SourceSpectrum(Const1D)
+
+    else: raise Exception('Invalid source model')
+
+    # Redshift it
+    sourceSpectrum.z = args.z
+
+    # Galactic extinction
+    # https://pysynphot.readthedocs.io/en/latest/spectrum.html#pysynphot-extinction
+    if args.E_BV != 0:
+        from synphot import ReddeningLaw
+        redlaw = ReddeningLaw.from_extinction_model(args.extmodel)
+        sourceSpectrum *= SpectralElement(redlaw.extinction_curve(args.E_BV))
+
+    # Load bandpass for normalization
+    if args.magref[1].lower() == 'user':
+        # Use the wavelength range from command line
+        from synphot.models import Box1D
+        norm_band = SpectralElement(Box1D, amplitude=1, x_0=args.wrange.mean(), 
+                                    width=(args.wrange[1]-args.wrange[0]) )
+    else:
+        norm_band = SpectralElement.from_filter('johnson_'+args.magref[1].lower())
+
+    # Normalize source - this is done after all astrophysical adjustments and before the atmosphere
+    # So we are fixing the magnitude "at the top of the atmosphere"
+    if args.magref[0].upper() == 'AB':
+        sourceSpectrum = sourceSpectrum.normalize(args.mag*u.ABmag ,band=norm_band )
+                                                  #,wavelengths=sourceSpectrum.waveset)
+    elif args.magref[0].upper() == 'VEGA':
+        sourceSpectrum = sourceSpectrum.normalize(args.mag*uu.VEGAMAG ,band=norm_band 
+                                                  ,vegaspec=SourceSpectrum.from_vega())
+
+    return sourceSpectrum
+
 
 def Extinction_atm(airmass):
     '''Compute Transmission vs. wavelength modulated by airmass.  Returns bandpass object'''
@@ -284,6 +343,136 @@ def profileOnDetector(channel ,slit_w ,seeing ,pivot ,lams ,spatial_range=None ,
     # shapes are (Npix, Nlambda)
 
     return profile_slit
+
+def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args ,chanlist):
+    '''Convert source and sky spectra at slit entrance to spectra at focal plane.
+    Applies throughput of slit and slicer, convolves with LSF, computes sharpness parameters
+    Assumes seeing-limited PSF
+
+    INPUTS
+    slitw:  slit width (unitful)
+    source_at_slit: dict of source spectra for each channel, including effects of atm and all throughputs except slit/slicer
+    sky_at_slit:  dict of ky spectra for each channel, including all throughputs except slit/slicer
+    throughput_slicerOptics: throughput of slicer optics (bandpass object)
+    args:  argparse object with all the command line arguments
+    '''
+
+    binCenters = makeBinCenters(args.binning[0], chanlist=chanlist)
+    slicer_paths = ['center','side']
+
+    # Combine slit fractions arrays with Optics to make throughput elements
+    throughput_slicer = slitEfficiency(slitw ,slit_h ,args.seeing[0] ,pivot=args.seeing[1] ,optics=throughput_slicerOptics)
+
+    # Compute pixelized spatial profiles for a flat spectrum
+    # Multiplying spectra by these profiles "distributes" counts over pixels in spatial direction
+    # THIS IS ONLY HALF THE (symmetric) PROFILE, so it is normalized to 0.5
+    # profile_slit[k][lightpath] sums to 0.5 in each w bin and each path individually
+
+    profile_slit = {}
+    sharpness = {}
+    for k in chanlist:
+        profile_slit[k] = profileOnDetector(k ,slitw ,args.seeing[0] ,args.seeing[1] ,binCenters[k]
+                                            ,spatial_range=None ,bin_spatial=args.binning[1])
+
+        sharpness[k]={}
+        for s in slicer_paths:
+            sharpness[k][s] = 2 * (profile_slit[k][s]**2).sum(0)
+
+    # Multiply source spectrum by all throughputs, atmosphere, slit loss, and convolve with LSF
+    # These are the flux densities at the focal plane array (FPA)
+    # Side slice throughputs are for a SINGLE side slice
+
+    sourceSpectrumFPA={}  #Total flux summed over all spatial pixels and used slices
+    skySpectrumFPA={}     #Flux PER spatial pixel, depends on slice bc of slicer optics
+
+    # background flux/pixel ~ slit_width * spatial_pixel_height; we'll scale sky flux by this later
+    bg_pix_area={}
+    for k in chanlist:
+        bg_pix_area[k] = slitw *(1*u.pix).to('arcsec' ,equivalencies=plate_scale[k])
+        # Make dimensionless in units of arcsec^2
+        bg_pix_area[k] = (bg_pix_area[k]/u.arcsec**2).to(u.dimensionless_unscaled).value
+
+        sourceSpectrumFPA[k]={}
+        skySpectrumFPA[k]={}
+
+        for s in slicer_paths:
+            spec = source_at_slit[k] * throughput_slicer[s]
+            sourceSpectrumFPA[k][s] = convolveLSF(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1])
+
+            # Doesn't include atmosphere or slitloss for sky flux
+            # Scale sky flux by effective area: slit_width*pixel_height
+            spec = sky_at_slit[k] * bg_pix_area[k]
+            if s == 'side': spec *= throughput_slicerOptics
+            skySpectrumFPA[k][s] = convolveLSF(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1])
+
+    return sourceSpectrumFPA, skySpectrumFPA, sharpness
+
+def computeSNR(exptime, slitw, args, SSSfocalplane, allChans=False):
+        '''Compute SNR from inputs'''
+        '''
+        exptime: exposure time (unitful)
+        slitw: slit width (unitful)
+        args: argparse object containing user inputs
+        SSSfocalplane: function that returns source spectra, sky spectra, and sharpness at the FPA
+        allChans: boolean
+        
+        RETURNS:
+            allChans --> dictionary of SNR/wavelength bin for all channels
+            not allChans --> single SNR value            
+        '''
+
+        binCenters = makeBinCenters(args.binning[0])
+
+        if args.noslicer: slicer_paths = ['center']
+        else:             slicer_paths = ['center','side']
+    
+        # Only loop over channels we need
+        if allChans: chanlist = channels # master list from config
+        else: chanlist = (args.channel)  # user's input channel; use tuple not list to allow function caching
+
+        sourceSpectrumFPA, skySpectrumFPA, sharpness = SSSfocalplane(slitw, chanlist)  #Cached
+
+        # Convert signal and background to counts (total per wavelength), including noise
+        # flux_unit='count' actually makes Spectrum object return counts/second,
+        #   so adjust units so we can scale by unitfull exptime
+
+        signal={}  #Total fluence (counts) summed over all spatial pixels
+        bgvar={}   #Variance (counts) PER spatial pixel read
+        SNR2={}
+        SNR={}
+
+        for k in chanlist:
+            signal[k] = {}
+            bgvar[k] = {}
+            SNR2[k] = {}
+
+            for s in slicer_paths:
+                signal[k][s] = sourceSpectrumFPA[k][s](binCenters[k] ,flux_unit='count' ,area=telescope_Area) \
+                                /u.s*exptime 
+
+                bgvar[k][s] = skySpectrumFPA[k][s](binCenters[k] ,flux_unit='count' ,area=telescope_Area) \
+                                /u.s*exptime
+                bgvar[k][s] += darkcurrent[k]*exptime*u.pix 
+                bgvar[k][s] *= args.binning[1]  #account for more background per pixel if binning
+                bgvar[k][s] += (readnoise[k]*u.pix)**2/u.ct  #read noise per read pixel is unchanged
+                                
+                SIGNAL = signal[k][s]
+                NOISE2 = SIGNAL + bgvar[k][s]/sharpness[k][s]
+                SNR2[k][s] = (SIGNAL**2/NOISE2 /u.ct).value  #**.5/u.ct**.5
+
+            SNR[k] = deepcopy(SNR2[k]['center'])
+            if not args.noslicer: SNR[k] += 2*SNR2[k]['side']
+            SNR[k] = SNR[k]**0.5
+
+        # Return SNR data for each channel
+        if allChans: return SNR
+
+        # Return 1 number - the SNR caclulated from user input
+        else:
+            # Find the bins where the target wavelengths live
+            ch = args.channel
+            closest_bin_i = [abs(binCenters[ch]-wr).argmin() for wr in args.wrange]
+            return (SNR[ch][closest_bin_i[0]:closest_bin_i[1]+1]).mean()
 
 def plotAllChannels(spec ,lambda_range=None ,binned=False ,spec_allchan=None ,binCenters=None):
     '''

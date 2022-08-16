@@ -12,12 +12,12 @@ def noQuitETCparser():
 
 help = 'Run the Exposure Time Calculator.  Outputs are SNR, EXPTIME, wavelength range, and optional plots. '
 help += 'The model assumes that signals from 3 image slicer paths are summed for the SNR calculation.'
-epilog = 'Example minimum argument set: \n./ETC_main.py G 500 510 SNR 10 -slit .5 -seeing 1 500 -airmass 1 -skymag 21.4 -srcmodel blackbody 6000 -mag 18. -magref AB user'
+epilog = 'Example minimum argument set: \n./ETC_main.py G 500 510 SNR 10 -slit .5 -seeing 1 500 -airmass 1 -skymag 21.4 -mag 18. -magref AB user'
 
 parser = argparse.ArgumentParser(  # Make printed help text wider
   formatter_class=lambda prog: argparse.HelpFormatter(prog,max_help_position=40) ,description=help ,epilog=epilog)
 
-# Define some extra types to enforce positive values for arguments
+# Define some extra types to enforce values for arguments
 
 def posfloat(value): # require > 0
     fvalue = float(value)
@@ -37,6 +37,14 @@ def posint(value): # require > 0
         raise argparse.ArgumentTypeError("%s is an invalid positive int" % value)
     return ivalue
 
+def slitfloat(value): # require slit in slit_w_range
+	from ETC.ETC_config import slit_w_range
+	fvalue = float(value)
+	slitmin, slitmax = slit_w_range.to('arcsec').value
+	if (fvalue < slitmin) or (fvalue > slitmax):
+	    raise argparse.ArgumentTypeError("%s must be within %s" % (value, slit_w_range))
+	return fvalue
+
 SNRparam = parser.add_argument_group('SNR parameters')
 
 from ETC.ETC_config import channels
@@ -55,7 +63,7 @@ parser.add_argument('ETCfixed', type=posfloat, help=help)
 help = 'On-chip binning along dispersion (D) and spatial (S) axes'
 parser.add_argument('-binning', type=posint, nargs=2, default=[1,1], metavar=('BIN_D','BIN_S') ,help=help)
 
-help = 'Number of spatial pixels on either side of profile center to use for SNR. If none, fit spatial profile'
+help = 'NOT IMPLEMENTED. Number of spatial pixels on either side of profile center to use for SNR. If none, fit spatial profile'
 parser.add_argument('-SNR_pix', type=posint, default=None, help=help)
 
 help = 'Only use flux from the center slit, not side slices'
@@ -69,10 +77,10 @@ parser.add_argument('-plotdiag', action='store_true', help=help)
 
 obsparam = parser.add_argument_group('REQUIRED Observation conditions')
 
-help = 'Slit width (arcsec)'
-obsparam.add_argument('-slit', '-slitwidth', type=posfloat, required=True, help=help)
+help = 'Slit width (arcsec).  If none, set slit for maximum SNR.'
+obsparam.add_argument('-slit', '-slitwidth', type=slitfloat, required=False, help=help)
 
-help = 'Seeing FWHM (arcsec) defined at pivot wavelength (nm)'
+help = 'Seeing FWHM (arcsec) defined at zenith and at pivot wavelength (nm)'
 obsparam.add_argument('-seeing', type=posfloat, nargs=2, metavar=('SEEING','PIVOT'), required=True, help=help)
 
 help = 'Airmass (dimensionless)'
@@ -90,10 +98,10 @@ help = '''Reference system (AB, VEGA) and Johnson filter (UBVRIJK) for source ma
 Use FILTER="user" to normalize to the WRANGE input'''
 sourceparam_req.add_argument('-magref', type=str, nargs=2, metavar=('SYSTEM','FILTER'), required=True, help=help)
 
-help = 'Astronomical source model.  Examples: "blackbody 5000", "template spiral_001"'
-sourceparam_req.add_argument('-srcmodel', nargs='+', required=True, help=help)
-
 sourceparam_add = parser.add_argument_group('Additional source parameters')
+
+help = 'Astronomical source model.  Examples: "constant" (default), "blackbody 5000", "template spiral_001"'
+sourceparam_add.add_argument('-srcmodel', nargs='+', required=False, default=['constant'], help=help)
 
 help = 'Redshift'
 sourceparam_add.add_argument('-z', type=nonegfloat, default=0., help=help)
@@ -182,6 +190,9 @@ def check_inputs_add_units(args):
 	args.seeing[0] *= u.arcsec
 	args.seeing[1] *= u.nm
 	if hasattr(args, 'tempK'): args.tempK*=u.K
+
+	# Modulate seeing at zenith to seeing at airmass >1
+	args.seeing[0] *= args.airmass**0.6
 
 	# Check wavelength range is (min, max) and within specified channel
 	from ETC.ETC_config import channelRange

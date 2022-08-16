@@ -6,6 +6,7 @@ import astropy.units as u
 
 slit_w_range=[0.2,10.]*u.arcsec
 slit_h=60.*u.arcsec
+slit_efficiency_max = 0.97  # max fraction of PSF to enclose when optimizing for SNR
 
 telescope_D = 508.*u.cm  #Diameter
 Obscuration = 0.3 # As a ratio of M1
@@ -26,8 +27,7 @@ throughputFile_slicer = 'throughput_slicersides_temp.csv'
 
 # Channel-wise fixed parameters for this instrument; all channel keys must match
 
-channels=['U','G','R','I']
-#channel_dicts = []
+channels=('U','G','R','I')  # use tuple not list to allow function caching
 
 # Colors for plotting
 channelColor={
