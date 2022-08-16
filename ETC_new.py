@@ -8,7 +8,6 @@
 #        MOON PHASE/POSITION, ZODIACAL LIGHT
 #        Unique FILENAMES for plots?
 #
-# ADD -SNR_pix behavior
 # Clean up global-ish variables?
 # Error handling
 # Should background variances be 2x to acount for sky subtraction?

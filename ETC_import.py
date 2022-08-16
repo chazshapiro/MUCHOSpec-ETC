@@ -347,6 +347,7 @@ def profileOnDetector(channel ,slit_w ,seeing ,pivot ,lams ,spatial_range=None ,
 def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args ,chanlist):
     '''Convert source and sky spectra at slit entrance to spectra at focal plane.
     Applies throughput of slit and slicer, convolves with LSF, computes sharpness parameters
+    1/sharpness is effective spatial extent of profile in (possibly binned) pixels 
     Assumes seeing-limited PSF
 
     INPUTS
@@ -358,7 +359,8 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
     '''
 
     binCenters = makeBinCenters(args.binning[0], chanlist=chanlist)
-    slicer_paths = ['center','side']
+    if args.noslicer or args.fastSNR:   slicer_paths = ['center']
+    else:                               slicer_paths = ['center','side']
 
     # Combine slit fractions arrays with Optics to make throughput elements
     throughput_slicer = slitEfficiency(slitw ,slit_h ,args.seeing[0] ,pivot=args.seeing[1] ,optics=throughput_slicerOptics)
@@ -367,16 +369,19 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
     # Multiplying spectra by these profiles "distributes" counts over pixels in spatial direction
     # THIS IS ONLY HALF THE (symmetric) PROFILE, so it is normalized to 0.5
     # profile_slit[k][lightpath] sums to 0.5 in each w bin and each path individually
+    # profile_slit[k][lightpath] shape is (Nspatial, Nspectral)
 
     profile_slit = {}
-    sharpness = {}
     for k in chanlist:
         profile_slit[k] = profileOnDetector(k ,slitw ,args.seeing[0] ,args.seeing[1] ,binCenters[k]
                                             ,spatial_range=None ,bin_spatial=args.binning[1])
 
+    sharpness = {}
+    for k in chanlist:
         sharpness[k]={}
         for s in slicer_paths:
-            sharpness[k][s] = 2 * (profile_slit[k][s]**2).sum(0)
+            if args.fastSNR: sharpness[k][s] = array([0.5]*len(binCenters[k]))  #1/sharpness = [2,2,2,2...] pixels
+            else:            sharpness[k][s] = 2 * (profile_slit[k][s]**2).sum(0)
 
     # Multiply source spectrum by all throughputs, atmosphere, slit loss, and convolve with LSF
     # These are the flux densities at the focal plane array (FPA)
@@ -399,6 +404,10 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
             spec = source_at_slit[k] * throughput_slicer[s]
             sourceSpectrumFPA[k][s] = convolveLSF(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1])
 
+            if args.fastSNR:
+                # scale signal down to 2 center pixels
+                sourceSpectrumFPA[k][s] *= SpectralElement(Empirical1D, points=binCenters[k], lookup_table=2*profile_slit[k][s][0])
+
             # Doesn't include atmosphere or slitloss for sky flux
             # Scale sky flux by effective area: slit_width*pixel_height
             spec = sky_at_slit[k] * bg_pix_area[k]
@@ -420,15 +429,14 @@ def computeSNR(exptime, slitw, args, SSSfocalplane, allChans=False):
             allChans --> dictionary of SNR/wavelength bin for all channels
             not allChans --> single SNR value            
         '''
-
-        binCenters = makeBinCenters(args.binning[0])
-
-        if args.noslicer: slicer_paths = ['center']
-        else:             slicer_paths = ['center','side']
     
         # Only loop over channels we need
         if allChans: chanlist = channels # master list from config
         else: chanlist = (args.channel)  # user's input channel; use tuple not list to allow function caching
+
+        binCenters = makeBinCenters(args.binning[0], chanlist=chanlist)
+        if args.noslicer or args.fastSNR:   slicer_paths = ['center']
+        else:                               slicer_paths = ['center','side']
 
         sourceSpectrumFPA, skySpectrumFPA, sharpness = SSSfocalplane(slitw, chanlist)  #Cached
 
@@ -461,7 +469,7 @@ def computeSNR(exptime, slitw, args, SSSfocalplane, allChans=False):
                 SNR2[k][s] = (SIGNAL**2/NOISE2 /u.ct).value  #**.5/u.ct**.5
 
             SNR[k] = deepcopy(SNR2[k]['center'])
-            if not args.noslicer: SNR[k] += 2*SNR2[k]['side']
+            if not (args.noslicer or args.fastSNR): SNR[k] += 2*SNR2[k]['side']
             SNR[k] = SNR[k]**0.5
 
         # Return SNR data for each channel

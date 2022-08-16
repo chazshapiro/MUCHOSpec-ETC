@@ -63,11 +63,11 @@ parser.add_argument('ETCfixed', type=posfloat, help=help)
 help = 'On-chip binning along dispersion (D) and spatial (S) axes'
 parser.add_argument('-binning', type=posint, nargs=2, default=[1,1], metavar=('BIN_D','BIN_S') ,help=help)
 
-help = 'NOT IMPLEMENTED. Number of spatial pixels on either side of profile center to use for SNR. If none, fit spatial profile'
-parser.add_argument('-SNR_pix', type=posint, default=None, help=help)
-
 help = 'Only use flux from the center slit, not side slices'
 parser.add_argument('-noslicer', action='store_true', help=help)
+
+help = 'Assume astronomer only uses 2 brightest pixels in center slice for SNR'
+parser.add_argument('-fastSNR', action='store_true', help=help)
 
 help = 'Plot SNR vs. wavelength for the solution'
 parser.add_argument('-plotSNR', action='store_true', help=help)
