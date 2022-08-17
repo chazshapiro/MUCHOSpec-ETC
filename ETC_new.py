@@ -12,9 +12,6 @@
 # Error handling
 # Should background variances be 2x to acount for sky subtraction?
 
-### TRY CACHING CSV FILES ###
-
-
 # import timer
 # tt = timer.Timer()
 # tt.start()  # Measures time until tt.stop()
@@ -49,9 +46,8 @@ TP = { k : throughput_spectrograph[k]*QE[k]*throughput_telescope for k in channe
 throughput_slicerOptics = LoadCSVSpec(throughputFile_slicer)
 
 ''' MAIN FUNCTION RETURNS DICT OF RESULTS '''
-def main(etcargs ,quiet=False):
+def main(args ,quiet=False):
     from ETC.ETC_config import channels
-    args = etcargs
 
     # Check for valid inputs
     # If running as command line script, exit gracefully from a problem, otherwise raise an exception
