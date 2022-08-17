@@ -23,16 +23,6 @@ PSFsum2DFile = ETCdir+'/PSFsum2D.pkl' #pre-tabulated integral of PSF over slit a
 
 # Check config file inputs are valid and make some derived parameters
 
-# def lists_are_same(list_1, list_2):
-#     """ Check if lists are same regardless of order """
-#     ''' use dict.keys() to check if dicts have same keys'''
-#     if len(list_1) != len(list_2):
-#         return False
-#     return sorted(list_1) == sorted(list_2)
-
-# for d in channel_dicts: ### AVOID
-#     assert lists_are_same(channels ,d.keys()), "Mismatched channel key names"
-
 # Unit equivalence
 plate_scale = { k : u.pixel_scale(platescale[k]) for k in channels }
 
@@ -139,13 +129,11 @@ def makeSource(args):
 
     return sourceSpectrum
 
-
+bandpass_atm = LoadCSVSpec(throughputFile_atm)
 def Extinction_atm(airmass):
     '''Compute Transmission vs. wavelength modulated by airmass.  Returns bandpass object'''
-    '''Is there another parameter we can use to correct atm model using nightly data?'''
-    bandpass = LoadCSVSpec(throughputFile_atm)
+    bandpass = deepcopy(bandpass_atm)
     bandpass.model.lookup_table = bandpass.model.lookup_table**airmass
-
     return bandpass
 
 def convolveLSF(spectrum ,slit_w ,seeing ,ch ,kernel_upsample=5. ,kernel_range_factor=4. ,pivot=500*u.nm):

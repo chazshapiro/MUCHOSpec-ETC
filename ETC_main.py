@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # Author: Chaz Shapiro (2022)
 
+### THIS FILE NOW DEPRECATED; It computes SNR using a more complicated method with covariance matrices ###
+
 # TODOS: K-CORRECTION
 #        USER SED, EXTENDED SOURCES (mag/arcsec**2), HOST GALAXY (mag/area)
 #        MOON PHASE/POSITION, ZODIACAL LIGHT
@@ -296,7 +298,7 @@ def main(etcargs ,quiet=False):
 
         # Find root in log-log space where SNR(t) is ~linear; doesn't save much time but more likely to converge
         def SNRfunc(t_sec):
-            return log( SNR_from_exptime(10**t_sec*u.s, wave_range=args.wrange, ch=args.channel ,Np=args.SNR_pix) / SNR_target)
+            return log( SNR_from_exptime(10**t_sec*u.s, wave_range=args.wrange, ch=args.channel ,Np=None) / SNR_target) #,Np=args.SNR_pix
             # return SNR_from_exptime(t_sec*u.s, wave_range=args.wrange, ch=args.channel ,Np=args.SNR_pix) - SNR_target
 
         #ans = optimize.root_scalar(SNRfunc ,x0=1 ,x1=100)  ### Very bright stars may not converge here; try log-log
@@ -315,7 +317,7 @@ def main(etcargs ,quiet=False):
         
     else:
         t = exptime
-        SNR_t = SNR_from_exptime(t, wave_range=args.wrange, ch=args.channel ,Np=args.SNR_pix).astype('float16')
+        SNR_t = SNR_from_exptime(t, wave_range=args.wrange, ch=args.channel ,Np=None).astype('float16') #,Np=args.SNR_pix
         if not quiet:
             print('SNR=%s   exptime=%s'%(SNR_t, t))
         
