@@ -62,20 +62,14 @@ def main(etcargs ,quiet=False):
     throughput_telescope = LoadCSVSpec(throughputFile_telescope)
 
     # Load throughputs and detector QE for all spectrograph channels
-    throughput_spectrograph={}
-    QE={}
-    for k in channels:
-        throughput_spectrograph[k] = LoadCSVSpec(throughputFile_spectrograph[k])
-        QE[k] = LoadCSVSpec(QEFile[k])
+    throughput_spectrograph = { k : LoadCSVSpec(throughputFile_spectrograph[k]) for k in channels }
+    QE = { k : LoadCSVSpec(QEFile[k]) for k in channels }
  
     # Combine spectra with all throughputs except for slit/slicer
     # Source is modulated by atm, sky is not
-    sourceSpec_wTP={}
-    skySpec_wTP={}
-    for k in channels:
-        TP = throughput_spectrograph[k]*QE[k]*throughput_telescope
-        sourceSpec_wTP[k] = sourceSpectrum * throughput_atm * TP
-        skySpec_wTP[k] = skySpec * TP
+    TP = { k : throughput_spectrograph[k]*QE[k]*throughput_telescope for k in channels }
+    sourceSpec_wTP = { k : sourceSpectrum * throughput_atm * TP[k] for k in channels }
+    skySpec_wTP = { k : skySpec * TP[k] for k in channels }
 
     # Load throughput for slicer optics (either side of slit)
     throughput_slicerOptics = LoadCSVSpec(throughputFile_slicer)

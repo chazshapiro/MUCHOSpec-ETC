@@ -123,11 +123,9 @@ def formETCcommmand(row):  ### Maybe make command as list not a big string
 	cmd_kwargs = [ '-%s %s'%(k,row[k]) for k in etc_kwargs if not is_masked(row[k]) ]
 
 	# These columns are optional, so first check if they exist
-	cmd_optkwargs = []
-	for k in etc_optkwargs:
-		if k in row.colnames:
-			if not is_masked(row[k]):
-				cmd_optkwargs.append('-%s %s'%(k,row[k]))
+	cols_exist = (set(etc_optkwargs) & set(row.colnames))
+	cmd_optkwargs = [ '-%s %s'%(k,row[k]) for k in cols_exist if not is_masked(row[k]) ]
+
 	return cmd + ' '.join(cmd_kwargs+cmd_optkwargs)
 
 # Check that inputs are valid and append units where applicable

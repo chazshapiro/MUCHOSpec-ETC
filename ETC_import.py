@@ -33,8 +33,8 @@ def lists_are_same(list_1, list_2):
 for d in channel_dicts:
     assert lists_are_same(channels ,d.keys()), "Mismatched channel key names"
 
-plate_scale={} # Unit equivalence
-for k in channels: plate_scale[k]=u.pixel_scale(platescale[k])
+# Unit equivalence
+plate_scale = { k : u.pixel_scale(platescale[k]) for k in channels }
 
 dispersion_scale_nobin={}  # Unit equivalence
 for k in channels:
@@ -371,17 +371,14 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
     # profile_slit[k][lightpath] sums to 0.5 in each w bin and each path individually
     # profile_slit[k][lightpath] shape is (Nspatial, Nspectral)
 
-    profile_slit = {}
-    for k in chanlist:
-        profile_slit[k] = profileOnDetector(k ,slitw ,args.seeing[0] ,args.seeing[1] ,binCenters[k]
+    profile_slit = { k: profileOnDetector(k ,slitw ,args.seeing[0] ,args.seeing[1] ,binCenters[k]
                                             ,spatial_range=None ,bin_spatial=args.binning[1])
+                    for k in chanlist }
 
-    sharpness = {}
-    for k in chanlist:
-        sharpness[k]={}
-        for s in slicer_paths:
-            if args.fastSNR: sharpness[k][s] = array([0.5]*len(binCenters[k]))  #1/sharpness = [2,2,2,2...] pixels
-            else:            sharpness[k][s] = 2 * (profile_slit[k][s]**2).sum(0)
+    sharpness = { k : { s: 
+        array([0.5]*len(binCenters[k])) if args.fastSNR  #1/sharpness = [2, 2, 2, 2...]
+        else 2*(profile_slit[k][s]**2).sum(0)
+        for s in slicer_paths }  for k in chanlist }
 
     # Multiply source spectrum by all throughputs, atmosphere, slit loss, and convolve with LSF
     # These are the flux densities at the focal plane array (FPA)
@@ -391,11 +388,10 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
     skySpectrumFPA={}     #Flux PER spatial pixel, depends on slice bc of slicer optics
 
     # background flux/pixel ~ slit_width * spatial_pixel_height; we'll scale sky flux by this later
-    bg_pix_area={}
     for k in chanlist:
-        bg_pix_area[k] = slitw *(1*u.pix).to('arcsec' ,equivalencies=plate_scale[k])
-        # Make dimensionless in units of arcsec^2
-        bg_pix_area[k] = (bg_pix_area[k]/u.arcsec**2).to(u.dimensionless_unscaled).value
+        # area of sky projected onto 1 pixel in units of arcsec^2
+        bg_pix_area = slitw * (1*u.pix).to('arcsec' ,equivalencies=plate_scale[k])
+        bg_pix_area = bg_pix_area.to('arcsec2').value
 
         sourceSpectrumFPA[k]={}
         skySpectrumFPA[k]={}
@@ -410,7 +406,7 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
 
             # Doesn't include atmosphere or slitloss for sky flux
             # Scale sky flux by effective area: slit_width*pixel_height
-            spec = sky_at_slit[k] * bg_pix_area[k]
+            spec = sky_at_slit[k] * bg_pix_area
             if s == 'side': spec *= throughput_slicerOptics
             skySpectrumFPA[k][s] = convolveLSF(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1])
 
