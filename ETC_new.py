@@ -12,6 +12,8 @@
 # Error handling
 # Should background variances be 2x to acount for sky subtraction?
 
+### TRY CACHING CSV FILES ###
+
 
 # import timer
 # tt = timer.Timer()
@@ -22,7 +24,31 @@ from ETC.ETC_arguments import *
 from ETC.ETC_import import *
 from numpy import array, arange, vstack, log
 
+''' LOAD DATA that doesn't depend on user input '''
 
+# Load sky background; eventually will need to interpolate a larger table
+# background units dimensions are not same as other flux units
+# File units = u.photon/u.s/u.nm/u.arcsec**2/u.m**2 ~ phot/s/wavelength  VS  nm
+skySpec0 = SourceSpectrum.from_file(CSVdir+skybackground_file ,wave_unit='nm') #HARDCODED UNIT
+# assumes units = phot/s/cm^2/Angstrom 
+
+# Don't need to match mag reference and filter to source; will use whatever data we have
+skyFilter = SpectralElement.from_filter('johnson_v')
+
+# Load telescope throughput
+throughput_telescope = LoadCSVSpec(throughputFile_telescope)
+
+# Load throughputs and detector QE for all spectrograph channels
+throughput_spectrograph = { k : LoadCSVSpec(throughputFile_spectrograph[k]) for k in channels }
+QE = { k : LoadCSVSpec(QEFile[k]) for k in channels }
+
+# Combine spectra with all throughputs except for slit/slicer
+TP = { k : throughput_spectrograph[k]*QE[k]*throughput_telescope for k in channels }
+
+# Load throughput for slicer optics (either side of slit)
+throughput_slicerOptics = LoadCSVSpec(throughputFile_slicer)
+
+''' MAIN FUNCTION RETURNS DICT OF RESULTS '''
 def main(etcargs ,quiet=False):
     from ETC.ETC_config import channels
     args = etcargs
@@ -41,38 +67,16 @@ def main(etcargs ,quiet=False):
     # Load source spectrum model and normalize
     sourceSpectrum = makeSource(args)
 
-    # Load sky background; eventually will need to interpolate a larger table
-    # background units dimensions are not same as other flux units
-    # File units = u.photon/u.s/u.nm/u.arcsec**2/u.m**2 ~ phot/s/wavelength  VS  nm
-
-    skySpec = SourceSpectrum.from_file(CSVdir+skybackground_file ,wave_unit='nm') #HARDCODED UNIT
-    # assumes units = phot/s/cm^2/Angstrom 
-    # normalization is wrong but proportional to phot/s/wavelength, same as file
-
-    # Don't need to match mag reference and filter to source; will use whatever data we have
-    skyFilter = SpectralElement.from_filter('johnson_v')
-    skySpec = skySpec.normalize(args.skymag*uu.VEGAMAG ,band=skyFilter ,vegaspec=SourceSpectrum.from_vega() )
-
+    # Normalize the sky; normalization is wrong but proportional to phot/s/wavelength, same as file
+    skySpec = skySpec0.normalize(args.skymag*uu.VEGAMAG ,band=skyFilter ,vegaspec=SourceSpectrum.from_vega() )
     # new units = VEGAMAG/arcsec^2 since skymag is really mag/arcsec^2
 
     # Load "throughput" for atmosphere
     throughput_atm = Extinction_atm(args.airmass)
 
-    # Load telescope throughput
-    throughput_telescope = LoadCSVSpec(throughputFile_telescope)
-
-    # Load throughputs and detector QE for all spectrograph channels
-    throughput_spectrograph = { k : LoadCSVSpec(throughputFile_spectrograph[k]) for k in channels }
-    QE = { k : LoadCSVSpec(QEFile[k]) for k in channels }
- 
-    # Combine spectra with all throughputs except for slit/slicer
     # Source is modulated by atm, sky is not
-    TP = { k : throughput_spectrograph[k]*QE[k]*throughput_telescope for k in channels }
     sourceSpec_wTP = { k : sourceSpectrum * throughput_atm * TP[k] for k in channels }
     skySpec_wTP = { k : skySpec * TP[k] for k in channels }
-
-    # Load throughput for slicer optics (either side of slit)
-    throughput_slicerOptics = LoadCSVSpec(throughputFile_slicer)
 
     # Print the bins where the target wavelengths live; won't exactly match input range
     binCenters = makeBinCenters(args.binning[0])
@@ -124,7 +128,7 @@ def main(etcargs ,quiet=False):
             # return computeSNR(t_sec*u.s, args.slit, args, SSSfocalplane) - SNR_target
 
         #ans = optimize.root_scalar(SNRfunc ,x0=1 ,x1=100)  ### Very bright stars may not converge here; try log-log
-        ans = optimize.root_scalar(SNRfunc ,x0=0 ,x1=3)
+        ans = optimize.root_scalar(SNRfunc ,x0=0 ,x1=3 ,xtol=.01)
 
         # Check for converged answer
         if ans.converged:
