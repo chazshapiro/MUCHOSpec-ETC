@@ -23,15 +23,15 @@ PSFsum2DFile = ETCdir+'/PSFsum2D.pkl' #pre-tabulated integral of PSF over slit a
 
 # Check config file inputs are valid and make some derived parameters
 
-def lists_are_same(list_1, list_2):
-    """ Check if lists are same regardless of order """
-    ''' use dict.keys() to check if dicts have same keys'''
-    if len(list_1) != len(list_2):
-        return False
-    return sorted(list_1) == sorted(list_2)
+# def lists_are_same(list_1, list_2):
+#     """ Check if lists are same regardless of order """
+#     ''' use dict.keys() to check if dicts have same keys'''
+#     if len(list_1) != len(list_2):
+#         return False
+#     return sorted(list_1) == sorted(list_2)
 
-for d in channel_dicts:
-    assert lists_are_same(channels ,d.keys()), "Mismatched channel key names"
+# for d in channel_dicts: ### AVOID
+#     assert lists_are_same(channels ,d.keys()), "Mismatched channel key names"
 
 # Unit equivalence
 plate_scale = { k : u.pixel_scale(platescale[k]) for k in channels }
@@ -42,8 +42,8 @@ for k in channels:
     dispersion_scale_nobin[k]=u.pixel_scale( (lambdamax-lambdamin)/(Npix_dispers[k]*u.pix) )
 
 # Min and max wavelength of all channels together
-totalRange = array([channelRange[k].to('nm') for k in channels]) #np.array() removes units
-totalRange = [totalRange.min(),totalRange.max()]*u.nm
+totalRange = u.Quantity([v for v in channelRange.values()])
+totalRange = u.Quantity([totalRange.min(),totalRange.max()])
 
 telescope_Area = (1. - Obscuration**2)*pi*(telescope_D/2.)**2 #Collecting area 
 

@@ -3,6 +3,7 @@
 #TODO: asymmetric plate scale?
 
 import astropy.units as u
+from astropy.table import QTable
 
 slit_w_range=[0.2,10.]*u.arcsec
 slit_h=60.*u.arcsec
@@ -29,83 +30,43 @@ throughputFile_slicer = 'throughput_slicersides_temp.csv'
 
 channels=('U','G','R','I')  # use tuple not list to allow function caching
 
-# Colors for plotting
-channelColor={
-    'U':'blue',
-    'G':'green',
-    'R':'red',
-    'I':'magenta'
-}
+chanConfig=QTable([channels], names=['channel'])
+chanConfig.add_index('channel')  # Allows us to specify rows by channel
 
-throughputFile_spectrograph={
-    'U':'throughput-NGPS-spectrograph-U.csv',
-    'G':'throughput-NGPS-spectrograph-G.csv',
-    'R':'throughput-NGPS-spectrograph-R.csv',
-    'I':'throughput-NGPS-spectrograph-I.csv'
-}
+chanConfig['channelRange']=[[310.,436.], [417.,590.], [561.,794.], [756.,1040.]] * u.nm
 
-QEFile={
-    'U':'QE-LBNL-CCD-blue.csv',
-    'G':'QE-LBNL-CCD-red.csv',
-    'R':'QE-LBNL-CCD-red.csv',
-    'I':'QE-LBNL-CCD-red.csv'
-}
+# Width of detector (px) in the dispersion direction
+chanConfig['Npix_dispers']=(4096, 4096, 4096, 4096)
+
+chanConfig['platescale']=(0.191, 0.191, 0.191, 0.191)*u.arcsec/u.pix
+
+chanConfig['darkcurrent']=(2.0, 2.0, 2.0, 2.0)*u.count/u.pix/u.hr
+
+chanConfig['readnoise']=(4.0, 4.0, 4.0, 4.0)*u.count/u.pix
 
 #LSFFile={}  # Wait for data
 
 #1/2 of FWHM requirement --> sigma
-LSFsigma={
-    'U': 1.0/2/2.35*u.AA,
-    'G': 1.4/2/2.35*u.AA,
-    'R': 1.85/2/2.35*u.AA,
-    'I': 2.25/2/2.35*u.AA,
-}
+chanConfig['LSFsigma']=(1.0, 1.4, 1.85, 2.25)*u.AA /2/2.35
 
-channelRange={
-    'U': [310.,436.]*u.nm,
-    'G': [417.,590.]*u.nm,
-    'R': [561.,794.]*u.nm,
-    'I': [756.,1040.]*u.nm
-}
+# Colors for plotting
+chanConfig['channelColor']=('blue','green','red','magenta')
 
-# Width of detector (px) in the dispersion direction
-Npix_dispers={
-    'U':4096,
-    'G':4096,
-    'R':4096,
-    'I':4096
-}
+chanConfig['throughputFile_spectrograph']=(
+    'throughput-NGPS-spectrograph-U.csv',
+    'throughput-NGPS-spectrograph-G.csv',
+    'throughput-NGPS-spectrograph-R.csv',
+    'throughput-NGPS-spectrograph-I.csv'
+)
 
-platescale={
-    'U':0.191*u.arcsec/u.pix,
-    'G':0.191*u.arcsec/u.pix,
-    'R':0.191*u.arcsec/u.pix,
-    'I':0.191*u.arcsec/u.pix
-}
+chanConfig['QEFile']=(
+    'QE-LBNL-CCD-blue.csv',
+    'QE-LBNL-CCD-red.csv',
+    'QE-LBNL-CCD-red.csv',
+    'QE-LBNL-CCD-red.csv'
+)
 
-darkcurrent={
-    'U':2.0*u.count/u.pix/u.hr,
-    'G':2.0*u.count/u.pix/u.hr,
-    'R':2.0*u.count/u.pix/u.hr,
-    'I':2.0*u.count/u.pix/u.hr
-}
-
-readnoise={
-    'U':4.0*u.count/u.pix,
-    'G':4.0*u.count/u.pix,
-    'R':4.0*u.count/u.pix,
-    'I':4.0*u.count/u.pix
-}
-
-# List all the dictionaries here so we can check their channels match
-channel_dicts = [
-channelColor
-,throughputFile_spectrograph
-,QEFile
-,LSFsigma
-,channelRange
-,Npix_dispers
-,platescale
-,darkcurrent
-,readnoise
-]
+# Make standalone dicts from the columns in the data table
+chanConfigi=chanConfig.loc  # lets us use the index column
+for col in chanConfig.colnames:
+    globals()[col] = { ch : chanConfigi[ch][col] for ch in channels}
