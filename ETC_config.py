@@ -17,7 +17,8 @@ moffat_theta_factor = 0.5/(2**(1./moffat_beta) - 1.)**.5  # theta = factor*seein
 
 # Paths to data for this instrument
 
-CSVdir='/home/developer/Software/ETC/CSV/'
+# Leave CSVdir=None to use the default data in the repo
+CSVdir=None #'/home/developer/Software/ETC/CSV/'
 default_waveunit=u.nm  #assume units for all CSV files
 
 skybackground_file = 'Gemini_skybg_50_10.txt'  #placeholder sky model

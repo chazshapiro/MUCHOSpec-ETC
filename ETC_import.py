@@ -18,7 +18,7 @@ import ETC.path as p
 from os import path
 ETCdir = path.dirname(p.__file__)
 sourcesdir = ETCdir+'/sources/'
-#CSVdir = path[0]+'/CSV/'
+if CSVdir is None: CSVdir = ETCdir+'/CSV/'
 PSFsum2DFile = ETCdir+'/PSFsum2D.pkl' #pre-tabulated integral of PSF over slit and side slices
 
 # Check config file inputs are valid and make some derived parameters
