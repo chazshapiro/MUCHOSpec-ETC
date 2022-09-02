@@ -114,8 +114,8 @@ sourceparam_add.add_argument('-extmodel', type=str, default='mwavg', help=help)
 
 # ETC parameter summary for external modules
 etc_args = ['channel', 'wrange', 'SNR'] # Order is important
-etc_kwargs = ['slitwidth', 'airmass', 'skymag','seeing', 'mag', 'magref', 'srcmodel']
-etc_optkwargs = ['binning', 'SNR_pix', 'z', 'E_BV', 'extmodel']  ### -noslicer takes no argument in ETC command
+etc_kwargs = ['slitwidth', 'airmass', 'skymag','seeing', 'mag', 'magref']
+etc_optkwargs = ['srcmodel', 'binning', 'SNR_pix', 'z', 'E_BV', 'extmodel']  ### -noslicer takes no argument in ETC command
 
 def formETCcommmand(row):  ### Maybe make command as list not a big string
 	'''Form the ETC command line string from an astropy table row'''

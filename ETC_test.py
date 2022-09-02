@@ -80,12 +80,29 @@ def main(args ,quiet=False):
     if not quiet:
         print( args.wrange, "-->", binCenters[args.channel][closest_bin_i].round(3) )
 
+    if args.noslicer or args.fastSNR:   slicer_paths = ['center']
+    else:                               slicer_paths = ['center','side']
+
     '''  ALL SLIT DEPENDENCE BELOW THIS LINE '''
 
     # Setup the slicer function; cache saves time in loops where slit width doesn't change
     @cache
     def SSSfocalplane(w, chanlist):
-        return applySlit(w, sourceSpec_wTP, skySpec_wTP, throughput_slicerOptics, args ,chanlist)
+
+        sourceSpectrumFPA, skySpectrumFPA, sharpness = \
+            applySlit(w, sourceSpec_wTP, skySpec_wTP, throughput_slicerOptics, args ,chanlist)
+
+        # Convert signal and background to counts (total per wavelength), including noise
+        # flux_unit='count' actually makes Spectrum object return counts/second,
+        #   so adjust units so we can scale by unitfull exptime
+
+        signal = {k: {s: sourceSpectrumFPA[k][s](binCenters[k] ,flux_unit='count' ,area=telescope_Area)/u.s
+                        for s in slicer_paths} for k in chanlist }
+
+        bgvar = {k: {s: skySpectrumFPA[k][s](binCenters[k] ,flux_unit='count' ,area=telescope_Area)/u.s
+                        for s in slicer_paths} for k in chanlist }
+
+        return signal, bgvar, sharpness
 
     # Solve this function to find slitwidth that gives 97% efficiency (3% slit loss)
     def efffunc(slitw_arcsec):
@@ -109,7 +126,7 @@ def main(args ,quiet=False):
     if args.ETCmode == 'EXPTIME..SLIT':
         t = exptime
         slitw_result = args.slit
-        SNR_result = computeSNR(t, args.slit, args, SSSfocalplane).astype('float16')
+        SNR_result = computeSNR_test(t, args.slit, args, SSSfocalplane).astype('float16')
 
     # SNR and SLIT are fixed; solve for EXPTIME
     elif args.ETCmode == 'SNR..SLIT':
@@ -120,7 +137,7 @@ def main(args ,quiet=False):
 
         # Find root in log-log space where SNR(t) is ~linear; doesn't save much time but more likely to converge
         def SNRfunc(t_sec):
-            return log( computeSNR(10**t_sec*u.s, args.slit, args, SSSfocalplane) / SNR_target)
+            return log( computeSNR_test(10**t_sec*u.s, args.slit, args, SSSfocalplane) / SNR_target)
             # return computeSNR(t_sec*u.s, args.slit, args, SSSfocalplane) - SNR_target
 
         #ans = optimize.root_scalar(SNRfunc ,x0=1 ,x1=100)  ### Very bright stars may not converge here; try log-log
@@ -148,7 +165,7 @@ def main(args ,quiet=False):
         # Solve for 'best' slitwidth (maximize SNR)
         def SNRfunc(slitw_arcsec):
             # print(slitw_arcsec)
-            ret = computeSNR(t, slitw_arcsec*u.arcsec, args, SSSfocalplane)
+            ret = computeSNR_test(t, slitw_arcsec*u.arcsec, args, SSSfocalplane)
             return -ret
 
         ans = optimize.minimize_scalar(SNRfunc ,bounds=slit_w_range.value 
@@ -180,7 +197,7 @@ def main(args ,quiet=False):
     result = {'exptime':t, 'slitwidth':slitw_result, 'SNR':SNR_result}
 
     if args.plotSNR:
-        result['plotSNR'] = computeSNR(t, slitw_result ,args, SSSfocalplane, allChans=True)
+        result['plotSNR'] = computeSNR_test(t, slitw_result ,args, SSSfocalplane, allChans=True)
 
     return result
 

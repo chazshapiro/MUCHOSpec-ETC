@@ -424,6 +424,8 @@ def computeSNR(exptime, slitw, args, SSSfocalplane, allChans=False):
 
         sourceSpectrumFPA, skySpectrumFPA, sharpness = SSSfocalplane(slitw, chanlist)  #Cached
 
+        ### TO SPEED UP, ^THESE^ SHOULD BE THE COUNTS PER PIXEL, NOT SPECTRUM FUNCTIONS ###
+
         # Convert signal and background to counts (total per wavelength), including noise
         # flux_unit='count' actually makes Spectrum object return counts/second,
         #   so adjust units so we can scale by unitfull exptime
@@ -438,7 +440,7 @@ def computeSNR(exptime, slitw, args, SSSfocalplane, allChans=False):
             bgvar[k] = {}
             SNR2[k] = {}
 
-            for s in slicer_paths:
+            for s in slicer_paths:  ### These spectrum evals are the slow point in the main ETC loop - CAN WE CACHE?
                 signal[k][s] = sourceSpectrumFPA[k][s](binCenters[k] ,flux_unit='count' ,area=telescope_Area) \
                                 /u.s*exptime 
 
@@ -455,6 +457,59 @@ def computeSNR(exptime, slitw, args, SSSfocalplane, allChans=False):
             SNR[k] = deepcopy(SNR2[k]['center'])
             if not (args.noslicer or args.fastSNR): SNR[k] += 2*SNR2[k]['side']
             SNR[k] = SNR[k]**0.5
+
+        # Return SNR data for each channel
+        if allChans: return SNR
+
+        # Return 1 number - the SNR caclulated from user input
+        else:
+            # Find the bins where the target wavelengths live
+            ch = args.channel
+            closest_bin_i = [abs(binCenters[ch]-wr).argmin() for wr in args.wrange]
+            return (SNR[ch][closest_bin_i[0]:closest_bin_i[1]+1]).mean()
+
+def computeSNR_test(exptime, slitw, args, SSSfocalplane, allChans=False):
+        '''Compute SNR from inputs'''
+        '''
+        exptime: exposure time (unitful)
+        slitw: slit width (unitful)
+        args: argparse object containing user inputs
+        SSSfocalplane: function that returns source spectra, sky spectra, and sharpness at the FPA
+        allChans: boolean
+        
+        RETURNS:
+            allChans --> dictionary of SNR/wavelength bin for all channels
+            not allChans --> single SNR value            
+        '''
+    
+        # Only loop over channels we need
+        if allChans: chanlist = channels # master list from config
+        else: chanlist = (args.channel)  # user's input channel; use tuple not list to allow function caching
+
+        binCenters = makeBinCenters(args.binning[0], chanlist=chanlist)
+        if args.noslicer or args.fastSNR:   slicer_paths = ['center']
+        else:                               slicer_paths = ['center','side']
+
+        signal, bgvar, sharpness = SSSfocalplane(slitw, chanlist)  #Cached
+
+        SNR2={}
+        SNR={}
+
+        for k in chanlist:
+            SNR2[k] = {}
+
+            for s in slicer_paths:
+                SIGNAL = signal[k][s]*exptime 
+
+                #account for more background per pixel if binning
+                NOISE2 = (bgvar[k][s]*exptime + darkcurrent[k]*exptime*u.pix) * args.binning[1]
+                NOISE2 += (readnoise[k]*u.pix)**2/u.ct  #read noise per read pixel is unchanged                                
+                NOISE2 = SIGNAL + NOISE2/sharpness[k][s]  #add shot noise
+
+                SNR2[k][s] = (SIGNAL**2/NOISE2).to('ct').value
+
+            if args.noslicer or args.fastSNR: SNR[k] = SNR2[k]['center']**0.5
+            else: SNR[k] = (SNR2[k]['center']+2*SNR2[k]['side'])**0.5  # SNR combines in quadrature
 
         # Return SNR data for each channel
         if allChans: return SNR
