@@ -115,16 +115,17 @@ sourceparam_add.add_argument('-extmodel', type=str, default='mwavg', help=help)
 # ETC parameter summary for external modules
 etc_args = ['channel', 'wrange','exptime'] # Order is important  #, 'SNR' now coded in exptime
 etc_kwargs = ['slitwidth', 'airmass', 'skymag','seeing', 'mag', 'magref']
-etc_optkwargs = ['srcmodel', 'binning', 'SNR_pix', 'z', 'E_BV', 'extmodel']  ### -noslicer takes no argument in ETC command
+# etc_optkwargs = ['srcmodel', 'binning', 'SNR_pix', 'z', 'E_BV', 'extmodel']  ### -noslicer takes no argument in ETC command
+etc_optkwargs = ['source']
 
-def formETCcommmand(row):  ### Maybe make command as list not a big string
-	'''Form the ETC command line string from an astropy table row'''
+def formETCcommand(row):  ### Maybe make command as list not a big string
+	'''Form the ETC command line string from a dict created from astropy table row'''
 	cmd = '%s %s %s ' % tuple([row[k] for k in etc_args])  # e.g. U 400 410 SNR 5
 	cmd_kwargs = [ '-%s %s'%(k,row[k]) for k in etc_kwargs if not is_masked(row[k]) ]
 
 	# These columns are optional, so first check if they exist
 	cols_exist = (set(etc_optkwargs) & set(row.keys()))
-	cmd_optkwargs = [ '-%s %s'%(k,row[k]) for k in cols_exist if not is_masked(row[k]) ]
+	cmd_optkwargs = [ row[k] for k in cols_exist if not is_masked(row[k]) ]
 
 	return cmd + ' '.join(cmd_kwargs+cmd_optkwargs)
 

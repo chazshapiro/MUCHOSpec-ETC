@@ -371,7 +371,7 @@ def main(etcargs ,quiet=False):
 
 def runETC(row):
     '''Convert an astropy table row into an ETC command and run the ETC to get an exposure time'''
-    cmd = formETCcommmand(row)
+    cmd = formETCcommand(row)
     x = parser.parse_args(cmd.split())  ### Change this parser.error ? Should be OK since we check ETC cols at the beginning
     t = main(x ,quiet=True)  # Unitful (s)
     assert isinstance(t,u.Quantity), "Got invalid result from ETC"
@@ -379,7 +379,7 @@ def runETC(row):
 
 def checkETCargs(row):
     '''Convert an astropy table row into an ETC command and check it using the argument parser'''
-    cmd = formETCcommmand(row)
+    cmd = formETCcommand(row)
     #print(cmd)
     x = parser.parse_args(cmd.split())
     check_inputs_add_units(x)
