@@ -14,6 +14,7 @@ from copy import deepcopy
 
 from ETC.ETC_config import *
 
+# Setup paths to data that comes with the ETC package
 import ETC.path as p
 from os import path
 ETCdir = path.dirname(p.__file__)
