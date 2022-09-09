@@ -191,7 +191,7 @@ def runETC(row):
     result = main(x ,quiet=True)  # Unitful (s)
     t = result['exptime']
     assert isinstance(t,u.Quantity), "Got invalid result from ETC"
-    return t
+    return result
 
 def checkETCargs(row):
     '''Convert an astropy table row into an ETC command and check it using the argument parser'''

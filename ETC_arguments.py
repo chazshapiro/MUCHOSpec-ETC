@@ -42,7 +42,7 @@ def slitfloat(value): # require slit in slit_w_range
 	fvalue = float(value)
 	slitmin, slitmax = slit_w_range.to('arcsec').value
 	if (fvalue < slitmin) or (fvalue > slitmax):
-	    raise argparse.ArgumentTypeError("%s must be within %s" % (value, slit_w_range))
+	    raise argparse.ArgumentTypeError("slitwidth must be in %s" % (slit_w_range))
 	return fvalue
 
 SNRparam = parser.add_argument_group('SNR parameters')
@@ -55,7 +55,7 @@ help = 'Min and max wavelength (nm) for SNR avg, e.g. "500 510". Will be rounded
 parser.add_argument('wrange', type=posfloat ,nargs=2 ,help=help )
 
 help = 'Fix SNR or EXPTIME and calculate the other'
-parser.add_argument('ETCmode', type=str, choices=['SNR','EXPTIME'], help=help)
+parser.add_argument('ETCmode', type=str, choices=['SNR','EXPTIME','SET'], help=help)
 
 help = 'Value of the fixed parameter: SNR (dimensionless) or EXPTIME (s)'
 parser.add_argument('ETCfixed', type=posfloat, help=help)
@@ -77,8 +77,11 @@ parser.add_argument('-plotdiag', action='store_true', help=help)
 
 obsparam = parser.add_argument_group('REQUIRED Observation conditions')
 
-help = 'Slit width (arcsec).  If none, set slit for maximum SNR.'
-obsparam.add_argument('-slit', '-slitwidth', type=slitfloat, required=False, help=help)
+help = 'Mode of setting the slit width (string) and value for that mode (float).  '
+help += 'Valid modes are SET (set the slit width in arcsec), PSF (percentage of enclosed PSF), and SNR (???).'
+obsparam.add_argument('-slit', '-slitwidth', required=True, nargs=2,  metavar=('MODE','VALUE'), help=help)
+slitmodes = ['SET','SNR','PSF']
+#type=slitfloat,
 
 help = 'Seeing FWHM (arcsec) defined at zenith and at pivot wavelength (nm)'
 obsparam.add_argument('-seeing', type=posfloat, nargs=2, metavar=('SEEING','PIVOT'), required=True, help=help)
@@ -181,11 +184,24 @@ def check_inputs_add_units(args):
 	choices = ('lmc30dor', 'lmcavg', 'mwavg', 'mwdense', 'mwrv21', 'mwrv40', 'smcbar', 'xgalsb')
 	if args.extmodel not in choices: parser.error('-extmodel must be in '+str(choices))
 
+	# Valid slit mode
+	args.slitmode = args.slit[0].upper() # move the code to new parameter
+	args.slit = posfloat(args.slit[1]) # this parameter now just a float
+	if args.slitmode not in slitmodes: parser.error('-slitwidth MODE must be in '+str(slitmodes))
+
 	# Append units to inputs where applicable
 	import astropy.units as u
-	if args.slit is not None: args.slit *= u.arcsec
+
+	if args.slitmode == 'SET':
+		args.slit = slitfloat(args.slit)*u.arcsec  ### checks for valid range -- should simplify
+	else:
+		args.slit = 9.87 * u.arcsec  ### PLACEHOLDER UNTIL OTHER MODES IMPLEMENTED
+		### CHECK PSF AND SNR RANGES
+
 	args.wrange *= u.nm
-	if args.ETCmode == 'EXPTIME': args.ETCfixed *= u.s
+	if args.ETCmode in ['EXPTIME','SET']:
+		args.ETCfixed *= u.s
+		args.ETCmode = 'EXPTIME'
 	args.seeing[0] *= u.arcsec
 	args.seeing[1] *= u.nm
 	if hasattr(args, 'tempK'): args.tempK*=u.K

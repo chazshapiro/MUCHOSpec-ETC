@@ -375,7 +375,7 @@ def runETC(row):
     x = parser.parse_args(cmd.split())  ### Change this parser.error ? Should be OK since we check ETC cols at the beginning
     t = main(x ,quiet=True)  # Unitful (s)
     assert isinstance(t,u.Quantity), "Got invalid result from ETC"
-    return t
+    return result
 
 def checkETCargs(row):
     '''Convert an astropy table row into an ETC command and check it using the argument parser'''
