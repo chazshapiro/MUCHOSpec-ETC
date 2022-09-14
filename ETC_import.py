@@ -137,14 +137,13 @@ def Extinction_atm(airmass):
     bandpass.model.lookup_table = bandpass.model.lookup_table**airmass
     return bandpass
 
-def convolveLSF(spectrum ,slit_w ,seeing ,ch ,kernel_upsample=5. ,kernel_range_factor=4. ,pivot=500*u.nm):
-    '''Placeholder until we have LSF data. Convolve spectrum at focal plane with LSF'''
+def makeLSFkernel(slit_w ,seeing ,ch ,kernel_upsample=5. ,kernel_range_factor=4. ,pivot=500*u.nm):
+    '''Placeholder until we have LSF data'''
     '''
     Approximates seeing for each channel as Gaussian with scale at channel center wavelength
     Final kernel is INSTRUMENT * (SLIT X SEEING)  (*=convolve)
     TODO: vary LSF in dispersion and/or spatial directions
 
-    spectrum: synphot Spectrum object
     slit_w: slit width (angular size on sky)
     seeing: FWHM of seeing profile at pivot
     ch: channel name
@@ -152,14 +151,12 @@ def convolveLSF(spectrum ,slit_w ,seeing ,ch ,kernel_upsample=5. ,kernel_range_f
     kernel_range_factor: factor by which to extend range of kernel sampling
     pivot: wavelength where seeing FWHM is defined
 
-    RETURNS: Spectrum object (Emprical1D) after LSF convolution
+    RETURNS: Kernel with which to convolve the spectrum
     '''
     
     assert isinstance(slit_w,u.Quantity), "slit_w needs units"
-    assert isinstance(spectrum ,(SourceSpectrum,SpectralElement)), \
-        "Input spectrum must be SourceSpectrum or SpectralElement class"
     
-    from scipy.signal import convolve
+    from scipy.signal import peak_widths, convolve
 
     # Set seeing to that of center wavelength of channel
     # TODO: let seeing vary across channel?
@@ -185,9 +182,6 @@ def convolveLSF(spectrum ,slit_w ,seeing ,ch ,kernel_upsample=5. ,kernel_range_f
     xk = rangeQ(0.*dlambda,kernel_range+dlambda,dlambda)
     xk = hstack((-xk[::-1],xk[1:]))  # Symmetrizes range, e.g. [-2,-1,0,1,2]
 
-    # Make wavelength array for sampling spectrum; same spacing, larger range
-    x = rangeQ(channelRange[ch][0] ,channelRange[ch][1] ,dlambda)
-
     # Unitless arrays for use with convolve; BEWARE of boundary behavior
     # convolve(mode=same) matches size of 1st argument
     slitLSF = Gaussian1D(stddev=sigma_seeing_lam)*Box1D(width=slit_w_lam) # Multiply seeing profile with slit "tophat"
@@ -197,6 +191,42 @@ def convolveLSF(spectrum ,slit_w ,seeing ,ch ,kernel_upsample=5. ,kernel_range_f
 
     # Total kernel
     kernel = convolve(kernel1, kernel2, mode='same', method='auto')
+
+    # Width of final kernel 
+    fwhm=peak_widths(kernel, [int((kernel.shape[0]+1)/2)-1] )[0] * dlambda 
+    # R = (midlam/fwhm).to(1).value
+        
+    return kernel, fwhm, dlambda
+
+def convolveLSF(spectrum ,slit_w ,seeing ,ch ,kernel_upsample=5. ,kernel_range_factor=4. ,pivot=500*u.nm):
+    '''Placeholder until we have LSF data. Convolve spectrum at focal plane with LSF'''
+    '''
+    Approximates seeing for each channel as Gaussian with scale at channel center wavelength
+    Final kernel is INSTRUMENT * (SLIT X SEEING)  (*=convolve)
+    TODO: vary LSF in dispersion and/or spatial directions
+
+    spectrum: synphot Spectrum object
+    slit_w: slit width (angular size on sky)
+    seeing: FWHM of seeing profile at pivot
+    ch: channel name
+    kernel_upsample: factor by which to upsample kernel scale
+    kernel_range_factor: factor by which to extend range of kernel sampling
+    pivot: wavelength where seeing FWHM is defined
+
+    RETURNS: Spectrum object (Emprical1D) after LSF convolution
+    '''
+    
+    assert isinstance(slit_w,u.Quantity), "slit_w needs units"
+    assert isinstance(spectrum ,(SourceSpectrum,SpectralElement)), \
+        "Input spectrum must be SourceSpectrum or SpectralElement class"
+    
+    from scipy.signal import convolve
+
+    # Make the convolution kernel
+    kernel, fwhm , dlambda = makeLSFkernel(slit_w ,seeing ,ch ,kernel_upsample ,kernel_range_factor ,pivot)
+
+    # Make wavelength array for sampling spectrum; same spacing, larger range
+    x = rangeQ(channelRange[ch][0] ,channelRange[ch][1] ,dlambda)
 
     # Convolved spectrum as unitless array
     spec2 = convolve(spectrum(x).value, kernel, mode='same', method='auto')/kernel.sum()

@@ -12,7 +12,7 @@ def noQuitETCparser():
 
 help = 'Run the Exposure Time Calculator.  Outputs are SNR, EXPTIME, wavelength range, and optional plots. '
 help += 'The model assumes that signals from 3 image slicer paths are summed for the SNR calculation.'
-epilog = 'Example minimum argument set: \n./ETC_main.py G 500 510 SNR 10 -slit .5 -seeing 1 500 -airmass 1 -skymag 21.4 -mag 18. -magref AB user'
+epilog = 'Example minimum argument set: \n./ETC_new.py G 500 510 SNR 10 -slit SET .5 -seeing 1 500 -airmass 1 -skymag 21.4 -mag 18. -magref AB user'
 
 parser = argparse.ArgumentParser(  # Make printed help text wider
   formatter_class=lambda prog: argparse.HelpFormatter(prog,max_help_position=40) ,description=help ,epilog=epilog)
