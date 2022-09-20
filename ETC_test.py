@@ -46,16 +46,16 @@ TP = { k : throughput_spectrograph[k]*QE[k]*throughput_telescope for k in channe
 throughput_slicerOptics = LoadCSVSpec(throughputFile_slicer)
 
 ''' MAIN FUNCTION RETURNS DICT OF RESULTS '''
-def main(args ,quiet=False):
+def main(args ,quiet=False ,ETCextras=False):
     from ETC.ETC_config import channels
 
-    # Check for valid inputs
-    # If running as command line script, exit gracefully from a problem, otherwise raise an exception
-    try:
-        check_inputs_add_units(args)
-    except Exception as e:
-        if __name__ == "__main__": parser.error(e)
-        else: raise e
+    # # Check for valid inputs
+    # # If running as command line script, exit gracefully from a problem, otherwise raise an exception
+    # try:
+    #     check_inputs_add_units(args)
+    # except Exception as e:
+    #     if __name__ == "__main__": parser.error(e)
+    #     else: raise e
 
     # Only bother with channels being used for SNR;  Saves ~0.3s
     if not args.plotSNR and not args.plotdiag: channels = [args.channel]
@@ -118,9 +118,11 @@ def main(args ,quiet=False):
     elif args.ETCmode == 'EXPTIME': SNR_target, exptime = (None, args.ETCfixed)
     else: raise Exception('Invalid ETC mode')
 
-    if args.slit is not None: args.ETCmode += '..SLIT'  # makes this section more readable
+    if args.slitmode=='SET': args.ETCmode += '..SLIT'  # makes this section more readable
 
     ''' Compute SNR or solve for EXPTIME or SLIT depending on what is fixed '''
+
+    SNRfunc = None
 
     # EXPTIME and SLIT are fixed; just compute SNR
     if args.ETCmode == 'EXPTIME..SLIT':
@@ -149,7 +151,7 @@ def main(args ,quiet=False):
             t = (10.**(ans.root).astype('float16'))*u.s
         else:
             raise RuntimeError('ETC calculation did not converge')
-    # 52ms
+
     # EXPTIME is fixed; find SLIT that maximizes SNR
     elif args.ETCmode == 'EXPTIME':
         from scipy import optimize
@@ -179,46 +181,122 @@ def main(args ,quiet=False):
             SNR_result = -SNRfunc(slitw_max_arcsec)
             slitw_result = slitw_max_arcsec*u.arcsec
 
-        print('SLIT=%s  limit=%.2f  best=%.2f'%(slitw_result.round(2), slitw_max_arcsec, slitw_best_arcsec))
+        if not quiet:
+            print('SLIT=%s  limit=%.2f  best=%.2f'%(slitw_result.round(2), slitw_max_arcsec, slitw_best_arcsec))
 
     # SNR is fixed; solve for EXPTIME; for each EXPTIME tried, optimize SLIT
     # elif args.ETCmode == 'SNR':
-
-    t = t.round(3)
-
-    if not quiet:
-        print('slit efficiency= %.3f' % (efffunc(slitw_result.to('arcsec').value)+slit_efficiency_max) )
-        print('SNR=%.2f   exptime=%s'%(SNR_result, t) )
         
     # tt.stop()
 
     # RETURN FROM MAIN()
 
-    result = {'exptime':t, 'slitwidth':slitw_result, 'SNR':SNR_result}
+    result = {
+        'exptime':t,
+        'SNR':SNR_result*u.Unit(1),
+        'slitwidth':slitw_result,
+        'slit efficiency': (efffunc(slitw_result.to('arcsec').value)+slit_efficiency_max)*u.Unit(1)
+        }
+
+    if not quiet:
+        print(  '  '.join(['%s=%s' % (k,v.round(2)) for (k,v) in result.items()])  )
+
+    result['wrange'] = args.wrange
 
     if args.plotSNR:
         result['plotSNR'] = computeSNR_test(t, slitw_result ,args, SSSfocalplane, allChans=True)
 
-    return result
+    if ETCextras: # return extra functions and data for plotting
+        return result, efffunc, SNRfunc
+    else:
+        return result
 
-def runETC(row):
+
+def runETC(row ,check=False):
     '''Convert an astropy table row into an ETC command and run the ETC to get an exposure time'''
     cmd = formETCcommand(row)
-    x = parser.parse_args(cmd.split())  ### Change this parser.error ? Should be OK since we check ETC cols at the beginning
-    result = main(x ,quiet=True)  # Unitful (s)
+    args = parser.parse_args(cmd.split())  ### Change this parser.error ? Should be OK since we check ETC cols at the beginning
+    check_inputs_add_units(args) # Check for valid inputs; append units
+
+    # If only checking input, we're done
+    if check: return True
+
+    result = main(args ,quiet=True)  # Unitful (s)
     t = result['exptime']
     assert isinstance(t,u.Quantity), "Got invalid result from ETC"
     return result
 
-def checkETCargs(row):
-    '''Convert an astropy table row into an ETC command and check it using the argument parser'''
-    cmd = formETCcommand(row)
-    x = parser.parse_args(cmd.split())
-    check_inputs_add_units(x)
-    return True
+def plotSNR_vs_slit(args, plt):
+
+    from scipy import optimize
+
+    w_arcsec = arange(.2,4.5,.2)
+
+    ### HARDCODED UNITS
+    fwhm = [makeLSFkernel(wi ,args.seeing[0] ,args.channel ,pivot=args.seeing[1], kernel_upsample=10.)[1] for wi in w_arcsec*u.arcsec]
+    fwhm = array(fwhm)*fwhm[0].unit
+    R = array(args.wrange).mean()*u.nm/fwhm
+    R = R.to(1).value
+
+    slicer = [False, True]
+    colors = ['orange','blue']
+    labels = ['slit only','with slicer']
+
+    fig, ax1 = plt.subplots(figsize=(10,6))
+
+    for s, c, l in zip(slicer, colors, labels):
+
+        # Compute SNR for all slit widths; find max SNR and where slit encloses 97% of PSF
+
+        args.noslicer = not s
+        result, efffunc, SNRfunc = main(args ,quiet=True, ETCextras=True)  #SNRfunc will be SNR vs slit in arcsec
+
+        # Check that main() returned a function we can loop over for plotting
+        if SNRfunc is None:
+            from sys import exit
+            exit('No SNR function for plotting generated in this mode')
+
+        snrs = -array(list(map(SNRfunc,w_arcsec)))
+        ans = optimize.root_scalar(efffunc ,bracket=(w_arcsec.min(),w_arcsec.max()) ,x0=args.seeing[0])
+        w97 = ans.root
+
+        #Plot SNR for each case with vertical markers
+        ax1.plot(w_arcsec, snrs ,color=c ,label=l)
+        if s: ll = '97%'
+        else: ll = None
+        ax1.axvline(w97 ,color=c ,ls=':' ,label=ll)
+        if s: ll = 'max SNR'
+        else: ll = None
+        ax1.axvline(w_arcsec[snrs.argmax()] ,color=c ,ls='--',label=ll)
+
+    # Add labels for SNR plots
+    ax1.set_xlabel('Slit width (arcsec)')
+    ax1.set_ylabel('SNR')
+    ax1.set_title(str(result['wrange'])+'   mag=%s'%args.mag+'   exptime='+str(result['exptime']))
+    ax1.legend(loc='center right')
+
+    # Add plot and 2nd y-axis
+    ax2 = ax1.twinx()
+    ax2.plot(w_arcsec, R, label='R' ,color='green')
+    ax2.set_ylabel('R', color='green')
+    ax2.tick_params(axis ='y', labelcolor = 'green') 
+    ax2.tick_params(axis='y', direction='in', length=6, width=2, colors='g')#, grid_color='r', grid_alpha=0.5)
+    ax2.grid(False)
+
+    plt.savefig('SNR_vs_slit.png')
+    print('Wrote', 'SNR_vs_slit.png')
+
+    #plt.show()
+
 
 if __name__ == "__main__":
     args = parser.parse_args()
+
+    # Check for valid inputs; append units
+    try: check_inputs_add_units(args)
+    except Exception as e: parser.error(e)  # Exit gracefully
+
+    # Run the main program
     result = main(args ,quiet=False)
     print('')
 
@@ -232,6 +310,7 @@ if __name__ == "__main__":
         plt.style.use(astropy_mpl_style)
         quantity_support()
 
+    if args.plotSNR:
         SNR1 = result['plotSNR']
 
         fig, ax = plt.subplots(figsize=(15,4))
@@ -245,3 +324,8 @@ if __name__ == "__main__":
         ax.axvspan(args.wrange[0], args.wrange[1], alpha=0.2, color='grey') # shade user range
         plt.title('EXPTIME = '+str(result['exptime']))
         plt.savefig('plotSNR.png')
+        print('Wrote', 'plotSNR.png')
+
+    if args.plotdiag:
+        # Plot SNR and resolution (R) vs. slit width for this target
+        plotSNR_vs_slit(args, plt)
