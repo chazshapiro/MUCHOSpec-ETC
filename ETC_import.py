@@ -1,16 +1,18 @@
 
 #TODO: remove asserts
-#TODO: rewite LSF convolution using astropy/specutils
+#TODO: rewite LSF convolution using astropy.convolution
 
 #import numpy as np
 from numpy import array, arange, pi, hstack, vstack
 from pickle import load as pload  # Only needed in point source case
-from synphot import SourceSpectrum, SpectralElement  #TODO <<---- SLOW IMPORT!
+from synphot import SourceSpectrum, SpectralElement  ### SLOW IMPORT!
 from synphot.models import Empirical1D, Gaussian1D, Box1D
 import astropy.units as u
 import synphot.units as uu  # used in main code, not this file
 from functools import cache
 from copy import deepcopy
+from scipy.signal import convolve, peak_widths
+# from astropy.convolution import convolve_models
 
 from ETC.ETC_config import *
 
@@ -86,14 +88,14 @@ def makeSource(args):
     Returns a spectrum object for the source at the top of the atmosphere
     '''
     # Load source spectrum model
-    if args.srcmodel[0].lower() == 'template':
+    if args.model[0].lower() == 'template':
         label = args.srctemp.split('/')[-1]  #used for plot labels
         sourceSpectrum = SourceSpectrum.from_file(args.srctemp)
-    elif args.srcmodel[0].lower() == 'blackbody':
+    elif args.model[0].lower() == 'blackbody':
         from synphot.models import BlackBodyNorm1D
         label = 'blackbody '+str(args.tempK)
         sourceSpectrum = SourceSpectrum(BlackBodyNorm1D, temperature=args.tempK)
-    elif args.srcmodel[0].lower() == 'constant':
+    elif args.model[0].lower() == 'constant':
         from astropy.modeling.models import Const1D
         label = 'constant'
         sourceSpectrum = SourceSpectrum(Const1D)
@@ -156,8 +158,6 @@ def makeLSFkernel(slit_w ,seeing ,ch ,kernel_upsample=10. ,kernel_range_factor=4
     
     assert isinstance(slit_w,u.Quantity), "slit_w needs units"
     
-    from scipy.signal import peak_widths, convolve
-
     # Set seeing to that of center wavelength of channel
     # TODO: let seeing vary across channel?
     midlam = channelRange[ch].mean()
@@ -196,9 +196,13 @@ def makeLSFkernel(slit_w ,seeing ,ch ,kernel_upsample=10. ,kernel_range_factor=4
     fwhm=peak_widths(kernel, [int((kernel.shape[0]+1)/2)-1] )[0] * dlambda 
     # R = (midlam/fwhm).to(1).value
 
+    # kk = convolve_models(slitLSF, instLSF)
+
+    #breakpoint()
+
     return kernel, fwhm, dlambda
 
-def convolveLSF(spectrum ,slit_w ,seeing ,ch ,kernel_upsample=5. ,kernel_range_factor=4. ,pivot=500*u.nm):
+def convolveLSF(spectrum ,slit_w ,seeing ,ch ,kernel_upsample=10. ,kernel_range_factor=4. ,pivot=500*u.nm):
     '''Placeholder until we have LSF data. Convolve spectrum at focal plane with LSF'''
     '''
     Approximates seeing for each channel as Gaussian with scale at channel center wavelength
@@ -219,8 +223,6 @@ def convolveLSF(spectrum ,slit_w ,seeing ,ch ,kernel_upsample=5. ,kernel_range_f
     assert isinstance(slit_w,u.Quantity), "slit_w needs units"
     assert isinstance(spectrum ,(SourceSpectrum,SpectralElement)), \
         "Input spectrum must be SourceSpectrum or SpectralElement class"
-    
-    from scipy.signal import convolve
 
     # Make the convolution kernel
     kernel, fwhm , dlambda = makeLSFkernel(slit_w ,seeing ,ch ,kernel_upsample ,kernel_range_factor ,pivot)
@@ -238,6 +240,8 @@ def convolveLSF(spectrum ,slit_w ,seeing ,ch ,kernel_upsample=5. ,kernel_range_f
         newspec = SpectralElement(Empirical1D, points=x, lookup_table=spec2, keep_neg=True)
     else:
         raise Exception("Unsupported input spectrum class")
+
+    # breakpoint()
         
     return newspec
 

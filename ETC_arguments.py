@@ -104,7 +104,7 @@ sourceparam_req.add_argument('-magref', type=str, nargs=2, metavar=('SYSTEM','FI
 sourceparam_add = parser.add_argument_group('Additional source parameters')
 
 help = 'Astronomical source model.  Examples: "constant" (default), "blackbody 5000", "template spiral_001"'
-sourceparam_add.add_argument('-srcmodel', nargs='+', required=False, default=['constant'], help=help)
+sourceparam_add.add_argument('-model', nargs='+', required=False, default=['constant'], help=help)
 
 help = 'Redshift'
 sourceparam_add.add_argument('-z', type=nonegfloat, default=0., help=help)
@@ -118,8 +118,8 @@ sourceparam_add.add_argument('-extmodel', type=str, default='mwavg', help=help)
 # ETC parameter summary for external modules
 etc_args = ['channel', 'wrange','exptime'] # Order is important  #, 'SNR' now coded in exptime
 etc_kwargs = ['slitwidth', 'airmass', 'skymag','seeing', 'mag', 'magref']
-# etc_optkwargs = ['srcmodel', 'binning', 'SNR_pix', 'z', 'E_BV', 'extmodel']  ### -noslicer takes no argument in ETC command
-etc_optkwargs = ['source']
+# etc_optkwargs = ['model', 'binning', 'SNR_pix', 'z', 'E_BV', 'extmodel']  ### -noslicer takes no argument in ETC command
+etc_optkwargs = ['srcmodel']
 
 def formETCcommand(row):  ### Maybe make command as list not a big string
 	'''Form the ETC command line string from a dict created from astropy table row'''
@@ -135,19 +135,19 @@ def formETCcommand(row):  ### Maybe make command as list not a big string
 # Check that inputs are valid and append units where applicable
 def check_inputs_add_units(args):
 
-	srcmodel = args.srcmodel[0]
+	model = args.model[0]
 
 	# Number of expected arguments after command line option
 	choices = {'blackbody':2,'template':2,'constant':1}
 
-	if srcmodel.lower() not in choices: parser.error('-srcmodel first argument must be in '+str(choices.keys()))
+	if model.lower() not in choices: parser.error('-model first argument must be in '+str(choices.keys()))
 
-	if len(args.srcmodel) != choices[srcmodel]: parser.error('-srcmodel "%s" requires exactly %i arguments'%(srcmodel,choices[srcmodel]))
+	if len(args.model) != choices[model]: parser.error('-model "%s" requires exactly %i arguments'%(model,choices[model]))
 
 	# Check for valid template if using a template model
-	if srcmodel.lower()=='template':
+	if model.lower()=='template':
 
-		args.srctemp = args.srcmodel[1]  # copy template name to new attribute
+		args.srctemp = args.model[1]  # copy template name to new attribute
 
 		# Automatically go looking for the template in the sources directory
 		from os import walk
@@ -166,9 +166,9 @@ def check_inputs_add_units(args):
 		if not foundTemplate: parser.error("Could not find source template: "+args.srctemp+'.fits')
 
 	# Add/check temperature if using blackbody model
-	if srcmodel.lower()=='blackbody':
-		try: args.tempK = posfloat(args.srcmodel[1])  # copy blackbody temperature to new attribute
-		except: parser.error("-srcmodel blackbody TEMPK requires TEMPK to be a positive float")
+	if model.lower()=='blackbody':
+		try: args.tempK = posfloat(args.model[1])  # copy blackbody temperature to new attribute
+		except: parser.error("-model blackbody TEMPK requires TEMPK to be a positive float")
 
 	# Valid mag system
 	choices = ['AB','VEGA']
