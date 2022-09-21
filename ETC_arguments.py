@@ -12,7 +12,8 @@ def noQuitETCparser():
 
 help = 'Run the Exposure Time Calculator.  Outputs are SNR, EXPTIME, wavelength range, and optional plots. '
 help += 'The model assumes that signals from 3 image slicer paths are summed for the SNR calculation.'
-epilog = 'Example minimum argument set: \n./ETC_main.py G 500 510 SNR 10 -slit SET .5 -seeing 1 500 -airmass 1 -skymag 21.4 -mag 18. -magref AB user'
+epilog = 'Example minimum argument set: \n./ETC_main.py G 500 510 SNR 10 -slit SET .5 -seeing 1 500 '
+epilog += '-airmass 1 -skymag 21.4 -mag 18. -magsystem AB -magfilter user'
 
 parser = argparse.ArgumentParser(  # Make printed help text wider
   formatter_class=lambda prog: argparse.HelpFormatter(prog,max_help_position=40) ,description=help ,epilog=epilog)
@@ -97,9 +98,13 @@ sourceparam_req = parser.add_argument_group('REQUIRED Source parameters')
 help = 'Source magnitude (observed at top of atmosphere)'
 sourceparam_req.add_argument('-mag', type=float, required=True, help=help)
 
-help = '''Reference system (AB, VEGA) and Johnson filter (UBVRIJK) for source magnitude, e.g. "VEGA V".  
-Use FILTER="user" to normalize to the WRANGE input'''
-sourceparam_req.add_argument('-magref', type=str, nargs=2, metavar=('SYSTEM','FILTER'), required=True, help=help)
+help = '''Reference system (AB or VEGA) for source magnitude'''
+choices=['AB','VEGA','Vega']
+sourceparam_req.add_argument('-magsystem', type=str, choices=choices, required=True, help=help)
+
+help = '''Johnson filter (UBVRIJK) to define source magnitude. Use FILTER="user" to normalize to the WRANGE input'''
+choices = [c for c in 'UBVRIJK'] + ['user','USER','User']
+sourceparam_req.add_argument('-magfilter', type=str, choices=choices, required=True, help=help)
 
 sourceparam_add = parser.add_argument_group('Additional source parameters')
 
@@ -117,7 +122,7 @@ sourceparam_add.add_argument('-extmodel', type=str, default='mwavg', help=help)
 
 # ETC parameter summary for external modules
 etc_args = ['channel', 'wrange','exptime'] # Order is important  #, 'SNR' now coded in exptime
-etc_kwargs = ['slitwidth', 'airmass', 'skymag','seeing', 'mag', 'magref']
+etc_kwargs = ['slitwidth', 'airmass', 'skymag','seeing', 'mag', 'magsystem','magfilter']
 # etc_optkwargs = ['model', 'binning', 'SNR_pix', 'z', 'E_BV', 'extmodel']  ### -noslicer takes no argument in ETC command
 etc_optkwargs = ['srcmodel']
 
@@ -169,16 +174,6 @@ def check_inputs_add_units(args):
 	if model.lower()=='blackbody':
 		try: args.tempK = posfloat(args.model[1])  # copy blackbody temperature to new attribute
 		except: parser.error("-model blackbody TEMPK requires TEMPK to be a positive float")
-
-	# Valid mag system
-	choices = ['AB','VEGA']
-	if args.magref[0].upper() not in choices: parser.error('-magref SYSTEM must be in '+str(choices))
-
-	# Valid mag filter
-	choices = 'UBVRIJK'
-	if args.magref[1].upper() != 'USER':
-		if args.magref[1].upper() not in choices:
-			parser.error('-magref FILTER must be "USER" or in '+str(choices))
 
 	# Valid extinction model
 	choices = ('lmc30dor', 'lmcavg', 'mwavg', 'mwdense', 'mwrv21', 'mwrv40', 'smcbar', 'xgalsb')

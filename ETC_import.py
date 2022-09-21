@@ -113,20 +113,20 @@ def makeSource(args):
         sourceSpectrum *= SpectralElement(redlaw.extinction_curve(args.E_BV))
 
     # Load bandpass for normalization
-    if args.magref[1].lower() == 'user':
+    if args.magfilter.lower() == 'user':
         # Use the wavelength range from command line
         from synphot.models import Box1D
         norm_band = SpectralElement(Box1D, amplitude=1, x_0=args.wrange.mean(), 
                                     width=(args.wrange[1]-args.wrange[0]) )
     else:
-        norm_band = SpectralElement.from_filter('johnson_'+args.magref[1].lower())
+        norm_band = SpectralElement.from_filter('johnson_'+args.magfilter.lower())
 
     # Normalize source - this is done after all astrophysical adjustments and before the atmosphere
     # So we are fixing the magnitude "at the top of the atmosphere"
-    if args.magref[0].upper() == 'AB':
+    if args.magsystem.upper() == 'AB':
         sourceSpectrum = sourceSpectrum.normalize(args.mag*u.ABmag ,band=norm_band )
                                                   #,wavelengths=sourceSpectrum.waveset)
-    elif args.magref[0].upper() == 'VEGA':
+    elif args.magsystem.upper() == 'VEGA':
         sourceSpectrum = sourceSpectrum.normalize(args.mag*uu.VEGAMAG ,band=norm_band 
                                                   ,vegaspec=SourceSpectrum.from_vega())
 
