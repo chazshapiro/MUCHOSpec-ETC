@@ -1,6 +1,6 @@
 
 #TODO: remove asserts
-#TODO: rewite LSF convolution using astropy.convolution
+#TODO: rewite LSF convolution using astropy.convolution?
 
 #import numpy as np
 from numpy import array, arange, pi, hstack, vstack
@@ -50,7 +50,7 @@ def makeBinCenters(binspec, chanlist=channels):
     for k in chanlist:
         lambdamin,lambdamax = channelRange[k]
         binCenters[k] = rangeQ(lambdamin,lambdamax, binspec*(lambdamax-lambdamin)/Npix_dispers[k])
-        # dispersion_scale[k]=u.pixel_scale( args.binning[0]*(lambdamax-lambdamin)/(Npix_dispers[k]*u.pix) )
+        # dispersion_scale[k]=u.pixel_scale( args.binspect*(lambdamax-lambdamin)/(Npix_dispers[k]*u.pix) )
     return binCenters
 
 def rangeQ(q0, q1, dq=None):
@@ -381,7 +381,7 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
     args:  argparse object with all the command line arguments
     '''
 
-    binCenters = makeBinCenters(args.binning[0], chanlist=chanlist)
+    binCenters = makeBinCenters(args.binspect, chanlist=chanlist)
     if args.noslicer or args.fastSNR:   slicer_paths = ['center']
     else:                               slicer_paths = ['center','side']
 
@@ -395,7 +395,7 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
     # profile_slit[k][lightpath] shape is (Nspatial, Nspectral)
 
     profile_slit = { k: profileOnDetector(k ,slitw ,args.seeing[0] ,args.seeing[1] ,binCenters[k]
-                                            ,spatial_range=None ,bin_spatial=args.binning[1])
+                                            ,spatial_range=None ,bin_spatial=args.binspat)
                     for k in chanlist }
 
     sharpness = { k : { s: 
@@ -453,7 +453,7 @@ def computeSNR(exptime, slitw, args, SSSfocalplane, allChans=False):
         if allChans: chanlist = channels # master list from config
         else: chanlist = (args.channel)  # user's input channel; use tuple not list to allow function caching
 
-        binCenters = makeBinCenters(args.binning[0], chanlist=chanlist)
+        binCenters = makeBinCenters(args.binspect, chanlist=chanlist)
         if args.noslicer or args.fastSNR:   slicer_paths = ['center']
         else:                               slicer_paths = ['center','side']
 
@@ -482,7 +482,7 @@ def computeSNR(exptime, slitw, args, SSSfocalplane, allChans=False):
                 bgvar[k][s] = skySpectrumFPA[k][s](binCenters[k] ,flux_unit='count' ,area=telescope_Area) \
                                 /u.s*exptime
                 bgvar[k][s] += darkcurrent[k]*exptime*u.pix 
-                bgvar[k][s] *= args.binning[1]  #account for more background per pixel if binning
+                bgvar[k][s] *= args.binspat  #account for more background per pixel if binning
                 bgvar[k][s] += (readnoise[k]*u.pix)**2/u.ct  #read noise per read pixel is unchanged
                                 
                 SIGNAL = signal[k][s]
@@ -521,7 +521,7 @@ def computeSNR_test(exptime, slitw, args, SSSfocalplane, allChans=False):
         if allChans: chanlist = channels # master list from config
         else: chanlist = (args.channel)  # user's input channel; use tuple not list to allow function caching
 
-        binCenters = makeBinCenters(args.binning[0], chanlist=chanlist)
+        binCenters = makeBinCenters(args.binspect, chanlist=chanlist)
         if args.noslicer or args.fastSNR:   slicer_paths = ['center']
         else:                               slicer_paths = ['center','side']
 
@@ -537,7 +537,7 @@ def computeSNR_test(exptime, slitw, args, SSSfocalplane, allChans=False):
                 SIGNAL = signal[k][s]*exptime 
 
                 #account for more background per pixel if binning
-                NOISE2 = (bgvar[k][s]*exptime + darkcurrent[k]*exptime*u.pix) * args.binning[1]
+                NOISE2 = (bgvar[k][s]*exptime + darkcurrent[k]*exptime*u.pix) * args.binspat
                 NOISE2 += (readnoise[k]*u.pix)**2/u.ct  #read noise per read pixel is unchanged                                
                 NOISE2 = SIGNAL + NOISE2/sharpness[k][s]  #add shot noise
 

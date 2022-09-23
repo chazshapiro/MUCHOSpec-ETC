@@ -12,8 +12,8 @@ def noQuitETCparser():
 
 help = 'Run the Exposure Time Calculator.  Outputs are SNR, EXPTIME, wavelength range, and optional plots. '
 help += 'The model assumes that signals from 3 image slicer paths are summed for the SNR calculation.'
-epilog = 'Example minimum argument set: \n./ETC_main.py G 500 510 SNR 10 -slit SET .5 -seeing 1 500 '
-epilog += '-airmass 1 -skymag 21.4 -mag 18. -magsystem AB -magfilter user'
+epilog = 'Example minimum argument set:\n'
+epilog += './ETC_main.py G 500 510 SNR 10 -slit SET .5 -seeing 1 500 -airmass 1 -skymag 21.4 -mag 18. -magsystem AB -magfilter user'
 
 parser = argparse.ArgumentParser(  # Make printed help text wider
   formatter_class=lambda prog: argparse.HelpFormatter(prog,max_help_position=40) ,description=help ,epilog=epilog)
@@ -61,8 +61,11 @@ parser.add_argument('ETCmode', type=str, choices=['SNR','EXPTIME','SET'], help=h
 help = 'Value of the fixed parameter: SNR (dimensionless) or EXPTIME (s)'
 parser.add_argument('ETCfixed', type=posfloat, help=help)
 
-help = 'On-chip binning along dispersion (D) and spatial (S) axes'
-parser.add_argument('-binning', type=posint, nargs=2, default=[1,1], metavar=('BIN_D','BIN_S') ,help=help)
+help = 'On-chip binning along dispersion/spectral axis'
+parser.add_argument('-binspect','-bindisp', type=posint, default=1, help=help)
+
+help = 'On-chip binning along spatial axis'
+parser.add_argument('-binspat', type=posint, default=1, help=help)
 
 help = 'Only use flux from the center slit, not side slices'
 parser.add_argument('-noslicer', action='store_true', help=help)
@@ -82,7 +85,6 @@ help = 'Mode of setting the slit width (string) and value for that mode (float).
 help += 'Valid modes are SET (set the slit width in arcsec), PSF (percentage of enclosed PSF), and SNR (???).'
 obsparam.add_argument('-slit', '-slitwidth', required=True, nargs=2,  metavar=('MODE','VALUE'), help=help)
 slitmodes = ['SET','SNR','PSF']
-#type=slitfloat,
 
 help = 'Seeing FWHM (arcsec) defined at zenith and at pivot wavelength (nm)'
 obsparam.add_argument('-seeing', type=posfloat, nargs=2, metavar=('SEEING','PIVOT'), required=True, help=help)
@@ -123,19 +125,22 @@ sourceparam_add.add_argument('-extmodel', type=str, default='mwavg', help=help)
 # ETC parameter summary for external modules
 etc_args = ['channel', 'wrange','exptime'] # Order is important  #, 'SNR' now coded in exptime
 etc_kwargs = ['slitwidth', 'airmass', 'skymag','seeing', 'mag', 'magsystem','magfilter']
-# etc_optkwargs = ['model', 'binning', 'SNR_pix', 'z', 'E_BV', 'extmodel']  ### -noslicer takes no argument in ETC command
-etc_optkwargs = ['srcmodel']
+etc_optargs = ['srcmodel']
+etc_optkwargs = ['binspect','binspat'] #, 'fast_SNR', -noslicer ; these take no arguments  ### -binspat ,-binspect
 
-def formETCcommand(row):  ### Maybe make command as list not a big string
+def formETCcommand(row):  ### Maybe make command as list not a big string  ### standardize 1 col per kw; make OTM reformat
 	'''Form the ETC command line string from a dict created from astropy table row'''
 	cmd = '%s %s %s ' % tuple([row[k] for k in etc_args])  # e.g. U 400 410 SNR 5
 	cmd_kwargs = [ '-%s %s'%(k,row[k]) for k in etc_kwargs if not is_masked(row[k]) ]
 
 	# These columns are optional, so first check if they exist
-	cols_exist = (set(etc_optkwargs) & set(row.keys()))
-	cmd_optkwargs = [ row[k] for k in cols_exist if not is_masked(row[k]) ]
+	cols_exist = (set(etc_optargs) & set(row.keys()))
+	cmd_optargs = [ row[k] for k in cols_exist if not is_masked(row[k]) ]
 
-	return cmd + ' '.join(cmd_kwargs+cmd_optkwargs)
+	cols_exist = (set(etc_optkwargs) & set(row.keys()))
+	cmd_optkwargs = [ '-%s %s'%(k,row[k]) for k in cols_exist if not is_masked(row[k]) ]	
+
+	return cmd + ' '.join(cmd_kwargs+cmd_optkwargs+cmd_optargs)
 
 # Check that inputs are valid and append units where applicable
 def check_inputs_add_units(args):

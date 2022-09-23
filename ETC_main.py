@@ -75,7 +75,7 @@ def main(args ,quiet=False ,ETCextras=False):
     skySpec_wTP = { k : skySpec * TP[k] for k in channels }
 
     # Print the bins where the target wavelengths live; won't exactly match input range
-    binCenters = makeBinCenters(args.binning[0])
+    binCenters = makeBinCenters(args.binspect)
     closest_bin_i = [abs(binCenters[args.channel]-wr).argmin() for wr in args.wrange]
     if not quiet:
         print( args.wrange, "-->", binCenters[args.channel][closest_bin_i].round(3) )
@@ -315,7 +315,7 @@ if __name__ == "__main__":
 
         fig, ax = plt.subplots(figsize=(15,4))
 
-        binCenters = makeBinCenters(args.binning[0])
+        binCenters = makeBinCenters(args.binspect)
         for k in channels:
             ax.plot(binCenters[k], SNR1[k] ,color=channelColor[k] ,label=k)
 
