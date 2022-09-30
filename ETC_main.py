@@ -12,14 +12,11 @@
 # Error handling
 # Should background variances be 2x to acount for sky subtraction?
 
-# import timer
-# tt = timer.Timer()
-# tt.start()  # Measures time until tt.stop()
-
 from ETC.ETC_config import *
 from ETC.ETC_arguments import *
 from ETC.ETC_import import *
 from numpy import array, arange, vstack, log
+from scipy import optimize
 
 ''' LOAD DATA that doesn't depend on user input '''
 
@@ -45,8 +42,18 @@ TP = { k : throughput_spectrograph[k]*QE[k]*throughput_telescope for k in channe
 # Load throughput for slicer optics (either side of slit)
 throughput_slicerOptics = LoadCSVSpec(throughputFile_slicer)
 
+# tt.stop('Setup')
+
 ''' MAIN FUNCTION RETURNS DICT OF RESULTS '''
 def main(args ,quiet=False ,ETCextras=False):
+    if args.timer:
+        import timer
+        tt = timer.Timer()
+        def stopstart_timer(msg):
+            tt.stop(msg)
+            tt.start()
+        tt.start()
+
     from ETC.ETC_config import channels
 
     # # Check for valid inputs
@@ -75,13 +82,14 @@ def main(args ,quiet=False ,ETCextras=False):
     skySpec_wTP = { k : skySpec * TP[k] for k in channels }
 
     # Print the bins where the target wavelengths live; won't exactly match input range
-    binCenters = makeBinCenters(args.binspect)
-    closest_bin_i = [abs(binCenters[args.channel]-wr).argmin() for wr in args.wrange]
+    binCenters = makeBinCenters(args.binspect ,chanlist=channels ,wrange=args.wrange)
+    # closest_bin_i = [abs(binCenters[args.channel]-wr).argmin() for wr in args.wrange]
     if not quiet:
-        print( args.wrange, "-->", binCenters[args.channel][closest_bin_i].round(3) )
+        print( args.wrange, "-->", binCenters[args.channel][[0,-1]].round(3) )
 
     if args.noslicer or args.fastSNR:   slicer_paths = ['center']
     else:                               slicer_paths = ['center','side']
+
 
     '''  ALL SLIT DEPENDENCE BELOW THIS LINE '''
 
@@ -120,6 +128,8 @@ def main(args ,quiet=False ,ETCextras=False):
 
     if args.slitmode=='SET': args.ETCmode += '..SLIT'  # makes this section more readable
 
+    if args.timer: stopstart_timer('Main setup')
+
     ''' Compute SNR or solve for EXPTIME or SLIT depending on what is fixed '''
 
     SNRfunc = None
@@ -132,7 +142,6 @@ def main(args ,quiet=False ,ETCextras=False):
 
     # SNR and SLIT are fixed; solve for EXPTIME
     elif args.ETCmode == 'SNR..SLIT':
-        from scipy import optimize
 
         slitw_result = args.slit
         SNR_result = SNR_target
@@ -154,10 +163,13 @@ def main(args ,quiet=False ,ETCextras=False):
 
     # EXPTIME is fixed; find SLIT that maximizes SNR
     elif args.ETCmode == 'EXPTIME':
-        from scipy import optimize
+
         t = exptime
 
         ans = optimize.root_scalar(efffunc ,bracket=tuple(slit_w_range.to('arcsec').value) ,x0=args.seeing[0].to('arcsec').value)
+
+        if args.timer: stopstart_timer('Find 97')
+
         # Check for converged answer
         if ans.converged:
             slitw_max_arcsec = ans.root # unitless, in arcsec
@@ -187,7 +199,7 @@ def main(args ,quiet=False ,ETCextras=False):
     # SNR is fixed; solve for EXPTIME; for each EXPTIME tried, optimize SLIT
     # elif args.ETCmode == 'SNR':
         
-    # tt.stop()
+    if args.timer: stopstart_timer('Main calculation')
 
     # RETURN FROM MAIN()
 
@@ -227,8 +239,6 @@ def runETC(row ,check=False):
     return result
 
 def plotSNR_vs_slit(args, plt):
-
-    from scipy import optimize
 
     w_arcsec = arange(.2,4.5,.2)
 
@@ -290,6 +300,7 @@ def plotSNR_vs_slit(args, plt):
 
 
 if __name__ == "__main__":
+
     args = parser.parse_args()
 
     # Check for valid inputs; append units

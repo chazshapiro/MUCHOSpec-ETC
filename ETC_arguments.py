@@ -79,6 +79,9 @@ parser.add_argument('-plotSNR', action='store_true', help=help)
 help = 'Make diagnostic plots'
 parser.add_argument('-plotdiag', action='store_true', help=help)
 
+help = 'Print timing info'
+parser.add_argument('-timer', action='store_true', help=help)
+
 obsparam = parser.add_argument_group('REQUIRED Observation conditions')
 
 help = 'Mode of setting the slit width (string) and value for that mode (float).  '

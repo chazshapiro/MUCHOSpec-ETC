@@ -43,14 +43,27 @@ telescope_Area = (1. - Obscuration**2)*pi*(telescope_D/2.)**2 #Collecting area
 
 # Function definitions
 
-@cache  # clever, but saves only ms
-def makeBinCenters(binspec, chanlist=channels):
-    '''Compute the center wavelength of each pixel along the spectral direction, accounting for binning'''
+#@cache  # saves only ms
+def makeBinCenters(binspec, chanlist=channels, wrange=None):
+    '''Compute the center wavelength of each pixel along the spectral direction, accounting for binning
+
+    binspec: binning in spectral direction (int)
+    chanlist: only compute for these channels
+    wrange: min and max wavelengths (unitful) -- only compute for this range
+
+    Returns: array (unitful) of bin center wavelengths
+    '''
+    
     binCenters={}
     for k in chanlist:
         lambdamin,lambdamax = channelRange[k]
         binCenters[k] = rangeQ(lambdamin,lambdamax, binspec*(lambdamax-lambdamin)/Npix_dispers[k])
         # dispersion_scale[k]=u.pixel_scale( args.binspect*(lambdamax-lambdamin)/(Npix_dispers[k]*u.pix) )
+
+        if wrange is not None:
+            closest_bin_i = [abs(binCenters[k]-wr).argmin() for wr in wrange]
+            binCenters[k] = binCenters[k][closest_bin_i[0]:closest_bin_i[1]+1]
+
     return binCenters
 
 def rangeQ(q0, q1, dq=None):
@@ -198,8 +211,6 @@ def makeLSFkernel(slit_w ,seeing ,ch ,kernel_upsample=10. ,kernel_range_factor=4
 
     # kk = convolve_models(slitLSF, instLSF)
 
-    #breakpoint()
-
     return kernel, fwhm, dlambda
 
 def convolveLSF(spectrum ,slit_w ,seeing ,ch ,kernel_upsample=10. ,kernel_range_factor=4. ,pivot=500*u.nm):
@@ -240,8 +251,6 @@ def convolveLSF(spectrum ,slit_w ,seeing ,ch ,kernel_upsample=10. ,kernel_range_
         newspec = SpectralElement(Empirical1D, points=x, lookup_table=spec2, keep_neg=True)
     else:
         raise Exception("Unsupported input spectrum class")
-
-    # breakpoint()
         
     return newspec
 
@@ -381,7 +390,7 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
     args:  argparse object with all the command line arguments
     '''
 
-    binCenters = makeBinCenters(args.binspect, chanlist=chanlist)
+    binCenters = makeBinCenters(args.binspect, chanlist=chanlist ,wrange=args.wrange)
     if args.noslicer or args.fastSNR:   slicer_paths = ['center']
     else:                               slicer_paths = ['center','side']
 
@@ -453,7 +462,7 @@ def computeSNR(exptime, slitw, args, SSSfocalplane, allChans=False):
         if allChans: chanlist = channels # master list from config
         else: chanlist = (args.channel)  # user's input channel; use tuple not list to allow function caching
 
-        binCenters = makeBinCenters(args.binspect, chanlist=chanlist)
+        binCenters = makeBinCenters(args.binspect, chanlist=chanlist ,wrange=args.wrange)
         if args.noslicer or args.fastSNR:   slicer_paths = ['center']
         else:                               slicer_paths = ['center','side']
 
@@ -497,11 +506,7 @@ def computeSNR(exptime, slitw, args, SSSfocalplane, allChans=False):
         if allChans: return SNR
 
         # Return 1 number - the SNR caclulated from user input
-        else:
-            # Find the bins where the target wavelengths live
-            ch = args.channel
-            closest_bin_i = [abs(binCenters[ch]-wr).argmin() for wr in args.wrange]
-            return (SNR[ch][closest_bin_i[0]:closest_bin_i[1]+1]).mean()
+        else: return SNR[args.channel].mean()
 
 def computeSNR_test(exptime, slitw, args, SSSfocalplane, allChans=False):
         '''Compute SNR from inputs'''
@@ -550,11 +555,7 @@ def computeSNR_test(exptime, slitw, args, SSSfocalplane, allChans=False):
         if allChans: return SNR
 
         # Return 1 number - the SNR caclulated from user input
-        else:
-            # Find the bins where the target wavelengths live
-            ch = args.channel
-            closest_bin_i = [abs(binCenters[ch]-wr).argmin() for wr in args.wrange]
-            return (SNR[ch][closest_bin_i[0]:closest_bin_i[1]+1]).mean()
+        else: return SNR[args.channel].mean()
 
 def plotAllChannels(spec ,lambda_range=None ,binned=False ,spec_allchan=None ,binCenters=None):
     '''
