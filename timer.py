@@ -6,8 +6,10 @@ class TimerError(Exception):
     """A custom exception used to report errors in use of Timer class"""
 
 class Timer:
-    def __init__(self):
+    def __init__(self, msg='Timer' ,turnOn=True):
         self._start_time = None
+        self.msg=msg
+        self.turnOn = turnOn
 
     def start(self):
         """Start a new timer"""
@@ -23,5 +25,15 @@ class Timer:
 
         elapsed_time = time.perf_counter() - self._start_time
         self._start_time = None
-        print(f"{tag}: {elapsed_time} seconds")
-        
+        msg = self.msg
+        print(f"{msg}: {elapsed_time} seconds")
+
+
+    def __enter__(self):
+        """Start a new timer as a context manager"""
+        if self.turnOn: self.start()
+        return self
+
+    def __exit__(self, *exc_info):
+        """Stop the context manager timer"""
+        if self.turnOn: self.stop()        
