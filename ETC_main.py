@@ -9,13 +9,12 @@
 #        Unique FILENAMES for plots?
 #
 # Clean up global-ish variables?
-# Error handling
 # Should background variances be 2x to acount for sky subtraction?
 
 from ETC.ETC_config import *
 from ETC.ETC_arguments import *
 from ETC.ETC_import import *
-from numpy import array, arange, vstack, log
+from numpy import array, arange, vstack, log, where
 from scipy import optimize
 
 ''' LOAD DATA that doesn't depend on user input '''
@@ -45,27 +44,26 @@ throughput_slicerOptics = LoadCSVSpec(throughputFile_slicer)
 # tt.stop('Setup')
 
 ''' MAIN FUNCTION RETURNS DICT OF RESULTS '''
-def main(args ,quiet=False ,ETCextras=False):
-    if args.timer:
-        import timer
-        tt = timer.Timer()
-        def stopstart_timer(msg):
-            tt.stop(msg)
-            tt.start()
-        tt.start()
+def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False):
 
     from ETC.ETC_config import channels
 
-    # # Check for valid inputs
-    # # If running as command line script, exit gracefully from a problem, otherwise raise an exception
-    # try:
-    #     check_inputs_add_units(args)
-    # except Exception as e:
-    #     if __name__ == "__main__": parser.error(e)
-    #     else: raise e
+    # Only bother with channels being used for SNR to save time
+    if plotSNR or plotdiag:
+        args.wrange_ = None
+    else:
+        channels = [args.channel]
+        args.wrange_ = args.wrange
 
-    # Only bother with channels being used for SNR;  Saves ~0.3s
-    if not args.plotSNR and not args.plotdiag: channels = [args.channel]
+    binCenters = makeBinCenters(args.binspect ,chanlist=channels ,wrange=args.wrange_)
+    args.binCenters_ = binCenters
+
+    # Print the bins where the target wavelengths live; won't exactly match input range
+    if not quiet:
+        print( args.wrange, "-->", binCenters[args.channel][[0,-1]].round(3) )
+
+    if args.noslicer or args.fastSNR:   slicer_paths = ['center']
+    else:                               slicer_paths = ['center','side']
 
     # Load source spectrum model and normalize
     sourceSpectrum = makeSource(args)
@@ -81,34 +79,26 @@ def main(args ,quiet=False ,ETCextras=False):
     sourceSpec_wTP = { k : sourceSpectrum * throughput_atm * TP[k] for k in channels }
     skySpec_wTP = { k : skySpec * TP[k] for k in channels }
 
-    # Print the bins where the target wavelengths live; won't exactly match input range
-    binCenters = makeBinCenters(args.binspect ,chanlist=channels ,wrange=args.wrange)
-    # closest_bin_i = [abs(binCenters[args.channel]-wr).argmin() for wr in args.wrange]
-    if not quiet:
-        print( args.wrange, "-->", binCenters[args.channel][[0,-1]].round(3) )
-
-    if args.noslicer or args.fastSNR:   slicer_paths = ['center']
-    else:                               slicer_paths = ['center','side']
-
-
     '''  ALL SLIT DEPENDENCE BELOW THIS LINE '''
 
     # Setup the slicer function; cache saves time in loops where slit width doesn't change
     @cache
-    def SSSfocalplane(w, chanlist):
+    def SSSfocalplane(w):
 
         sourceSpectrumFPA, skySpectrumFPA, sharpness = \
-            applySlit(w, sourceSpec_wTP, skySpec_wTP, throughput_slicerOptics, args ,chanlist)
+            applySlit(w, sourceSpec_wTP, skySpec_wTP, throughput_slicerOptics, args ,channels)
 
         # Convert signal and background to counts (total per wavelength), including noise
         # flux_unit='count' actually makes Spectrum object return counts/second,
         #   so adjust units so we can scale by unitfull exptime
 
+        # with Timer('flux to count',args.timer):
+
         signal = {k: {s: sourceSpectrumFPA[k][s](binCenters[k] ,flux_unit='count' ,area=telescope_Area)/u.s
-                        for s in slicer_paths} for k in chanlist }
+                        for s in slicer_paths} for k in channels }
 
         bgvar = {k: {s: skySpectrumFPA[k][s](binCenters[k] ,flux_unit='count' ,area=telescope_Area)/u.s
-                        for s in slicer_paths} for k in chanlist }
+                        for s in slicer_paths} for k in channels }
 
         return signal, bgvar, sharpness
 
@@ -122,33 +112,33 @@ def main(args ,quiet=False ,ETCextras=False):
     '''  ALL EXPTIME DEPENDENCE BELOW THIS LINE '''
 
     # Unpack SNR or EXPTIME and set the other to None
-    if args.ETCmode == 'SNR':       SNR_target, exptime = (args.ETCfixed, None)
-    elif args.ETCmode == 'EXPTIME': SNR_target, exptime = (None, args.ETCfixed)
+    ETCmode = args.ETCmode
+    if ETCmode == 'SNR':       SNR_target, exptime = (args.ETCfixed, None)
+    elif ETCmode == 'EXPTIME': SNR_target, exptime = (None, args.ETCfixed)
     else: raise Exception('Invalid ETC mode')
 
-    if args.slitmode=='SET': args.ETCmode += '..SLIT'  # makes this section more readable
-
-    if args.timer: stopstart_timer('Main setup')
+    if args.slitmode=='SET': ETCmode += '..SLIT'  # makes this section more readable
 
     ''' Compute SNR or solve for EXPTIME or SLIT depending on what is fixed '''
 
     SNRfunc = None
 
     # EXPTIME and SLIT are fixed; just compute SNR
-    if args.ETCmode == 'EXPTIME..SLIT':
+    if ETCmode == 'EXPTIME..SLIT':
         t = exptime
         slitw_result = args.slit
-        SNR_result = computeSNR_test(t, args.slit, args, SSSfocalplane).astype('float16')
+        SNR_result = computeSNR(t, args.slit, args, SSSfocalplane)
 
     # SNR and SLIT are fixed; solve for EXPTIME
-    elif args.ETCmode == 'SNR..SLIT':
+    elif ETCmode == 'SNR..SLIT':
 
+        # with Timer('expt solve',args.timer):
         slitw_result = args.slit
         SNR_result = SNR_target
 
         # Find root in log-log space where SNR(t) is ~linear; doesn't save much time but more likely to converge
         def SNRfunc(t_sec):
-            return log( computeSNR_test(10**t_sec*u.s, args.slit, args, SSSfocalplane) / SNR_target)
+            return log( computeSNR(10**t_sec*u.s, args.slit, args, SSSfocalplane) / SNR_target)
             # return computeSNR(t_sec*u.s, args.slit, args, SSSfocalplane) - SNR_target
 
         #ans = optimize.root_scalar(SNRfunc ,x0=1 ,x1=100)  ### Very bright stars may not converge here; try log-log
@@ -162,13 +152,12 @@ def main(args ,quiet=False ,ETCextras=False):
             raise RuntimeError('ETC calculation did not converge')
 
     # EXPTIME is fixed; find SLIT that maximizes SNR
-    elif args.ETCmode == 'EXPTIME':
+    elif ETCmode == 'EXPTIME':
 
         t = exptime
 
+        # with Timer('Find 97',args.timer):
         ans = optimize.root_scalar(efffunc ,bracket=tuple(slit_w_range.to('arcsec').value) ,x0=args.seeing[0].to('arcsec').value)
-
-        if args.timer: stopstart_timer('Find 97')
 
         # Check for converged answer
         if ans.converged:
@@ -176,10 +165,11 @@ def main(args ,quiet=False ,ETCextras=False):
         else:
             raise RuntimeError('Max slit efficiency calculation did not converge')
 
+        # with Timer('slit solve',args.timer):
         # Solve for 'best' slitwidth (maximize SNR)
         def SNRfunc(slitw_arcsec):
             # print(slitw_arcsec)
-            ret = computeSNR_test(t, slitw_arcsec*u.arcsec, args, SSSfocalplane)
+            ret = computeSNR(t, slitw_arcsec*u.arcsec, args, SSSfocalplane)
             return -ret
 
         ans = optimize.minimize_scalar(SNRfunc ,bounds=slit_w_range.value 
@@ -199,8 +189,6 @@ def main(args ,quiet=False ,ETCextras=False):
     # SNR is fixed; solve for EXPTIME; for each EXPTIME tried, optimize SLIT
     # elif args.ETCmode == 'SNR':
         
-    if args.timer: stopstart_timer('Main calculation')
-
     # RETURN FROM MAIN()
 
     result = {
@@ -216,7 +204,7 @@ def main(args ,quiet=False ,ETCextras=False):
     result['wrange'] = args.wrange
 
     if args.plotSNR:
-        result['plotSNR'] = computeSNR_test(t, slitw_result ,args, SSSfocalplane, allChans=True)
+        result['plotSNR'] = computeSNR(t, slitw_result ,args, SSSfocalplane, allChans=True)
 
     if ETCextras: # return extra functions and data for plotting
         return result, efffunc, SNRfunc
@@ -282,7 +270,7 @@ def plotSNR_vs_slit(args, plt):
     # Add labels for SNR plots
     ax1.set_xlabel('Slit width (arcsec)')
     ax1.set_ylabel('SNR')
-    ax1.set_title(str(result['wrange'])+'   mag=%s'%args.mag+'   exptime='+str(result['exptime']))
+    ax1.set_title(str(result['wrange'])+'   mag=%s'%args.mag+'   exptime='+str(result['exptime'].round(3)))
     ax1.legend(loc='center right')
 
     # Add plot and 2nd y-axis
@@ -322,7 +310,12 @@ if __name__ == "__main__":
         quantity_support()
 
     if args.plotSNR:
-        SNR1 = result['plotSNR']
+        args.ETCmode = 'EXPTIME'
+        args.ETCfixed = result['exptime']
+        args.slitmode = 'SET'
+        args.slit = result['slitwidth']
+        result_plot = main(args ,quiet=True ,plotSNR=True)
+        SNR1 = result_plot['plotSNR']
 
         fig, ax = plt.subplots(figsize=(15,4))
 
@@ -333,7 +326,7 @@ if __name__ == "__main__":
         plt.ylabel('SNR / wavelength bin')
         plt.legend()
         ax.axvspan(args.wrange[0], args.wrange[1], alpha=0.2, color='grey') # shade user range
-        plt.title('EXPTIME = '+str(result['exptime']))
+        plt.title('EXPTIME = '+str(result['exptime'].round(3)))
         plt.savefig('plotSNR.png')
         print('Wrote', 'plotSNR.png')
 

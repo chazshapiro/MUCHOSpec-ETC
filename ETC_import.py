@@ -12,9 +12,10 @@ import synphot.units as uu  # used in main code, not this file
 from functools import cache
 from copy import deepcopy
 from scipy.signal import convolve, peak_widths
-# from astropy.convolution import convolve_models
 
 from ETC.ETC_config import *
+from timer import Timer
+SHOWTIME=False
 
 # Setup paths to data that comes with the ETC package
 import ETC.path as p
@@ -48,12 +49,12 @@ def makeBinCenters(binspec, chanlist=channels, wrange=None):
     '''Compute the center wavelength of each pixel along the spectral direction, accounting for binning
 
     binspec: binning in spectral direction (int)
-    chanlist: only compute for these channels
-    wrange: min and max wavelengths (unitful) -- only compute for this range
+    chanlist: loop over these channels
+    wrange: min and max wavelengths (Quantity)
 
-    Returns: array (unitful) of bin center wavelengths
+    Returns: dictionary of arrays (Quantity) of bin center wavelengths; keys = chanlist
     '''
-    
+
     binCenters={}
     for k in chanlist:
         lambdamin,lambdamax = channelRange[k]
@@ -67,7 +68,7 @@ def makeBinCenters(binspec, chanlist=channels, wrange=None):
     return binCenters
 
 def rangeQ(q0, q1, dq=None):
-    '''Construct an evenly spaced array using unitful quantities'''
+    '''Construct an evenly spaced array using unitful Quantities'''
     
     assert isinstance(q0, u.Quantity) and isinstance(q1, u.Quantity), "Inputs must be Quantities"
     
@@ -97,8 +98,8 @@ def seeingLambda(w ,FWHM ,pivot=500.*u.nm):
     return FWHM*(w/pivot)**0.2
 
 def makeSource(args):
-    ''' Load the source model, mix with astrophysics, normalize .
-    Returns a spectrum object for the source at the top of the atmosphere
+    ''' Load the source model, mix with astrophysics, normalize.
+    Returns a spectrum object for the source, normalized at the top of the atmosphere
     '''
     # Load source spectrum model
     if args.model[0].lower() == 'template':
@@ -158,15 +159,16 @@ def makeLSFkernel(slit_w ,seeing ,ch ,kernel_upsample=10. ,kernel_range_factor=4
     Approximates seeing for each channel as Gaussian with scale at channel center wavelength
     Final kernel is INSTRUMENT * (SLIT X SEEING)  (*=convolve)
     TODO: vary LSF in dispersion and/or spatial directions
+    TODO: Different LSFs for center and side slices
 
-    slit_w: slit width (angular size on sky)
-    seeing: FWHM of seeing profile at pivot
+    slit_w: slit width (unitful; angular size on sky)
+    seeing: FWHM of seeing profile at pivot (unitful)
     ch: channel name
     kernel_upsample: factor by which to upsample kernel scale
-    kernel_range_factor: factor by which to extend range of kernel sampling
-    pivot: wavelength where seeing FWHM is defined
+    kernel_range_factor: factor of LSF FWHM by which to extend range of kernel sampling
+    pivot: wavelength where seeing FWHM is defined (unitful)
 
-    RETURNS: Kernel with which to convolve the spectrum
+    RETURNS: Kernel (array, unitless) with which to convolve the spectrum
     '''
     
     assert isinstance(slit_w,u.Quantity), "slit_w needs units"
@@ -209,12 +211,10 @@ def makeLSFkernel(slit_w ,seeing ,ch ,kernel_upsample=10. ,kernel_range_factor=4
     fwhm=peak_widths(kernel, [int((kernel.shape[0]+1)/2)-1] )[0] * dlambda 
     # R = (midlam/fwhm).to(1).value
 
-    # kk = convolve_models(slitLSF, instLSF)
-
     return kernel, fwhm, dlambda
 
-def convolveLSF(spectrum ,slit_w ,seeing ,ch ,kernel_upsample=10. ,kernel_range_factor=4. ,pivot=500*u.nm):
-    '''Placeholder until we have LSF data. Convolve spectrum at focal plane with LSF'''
+def convolveLSF(spectrum, slit_w ,seeing ,ch ,kernel_upsample=10. ,kernel_range_factor=4. ,pivot=500*u.nm ,wrange_=None):  ###SPEED; side slice LSF is sus
+    '''Convolve spectrum at focal plane with LSF'''
     '''
     Approximates seeing for each channel as Gaussian with scale at channel center wavelength
     Final kernel is INSTRUMENT * (SLIT X SEEING)  (*=convolve)
@@ -227,6 +227,7 @@ def convolveLSF(spectrum ,slit_w ,seeing ,ch ,kernel_upsample=10. ,kernel_range_
     kernel_upsample: factor by which to upsample kernel scale
     kernel_range_factor: factor by which to extend range of kernel sampling
     pivot: wavelength where seeing FWHM is defined
+    wrange_: min and max wavelength range (Quantity) over which to convolve spectra
 
     RETURNS: Spectrum object (Emprical1D) after LSF convolution
     '''
@@ -236,15 +237,20 @@ def convolveLSF(spectrum ,slit_w ,seeing ,ch ,kernel_upsample=10. ,kernel_range_
         "Input spectrum must be SourceSpectrum or SpectralElement class"
 
     # Make the convolution kernel
+    # with Timer('makeLSFkernel',SHOWTIME):
     kernel, fwhm , dlambda = makeLSFkernel(slit_w ,seeing ,ch ,kernel_upsample ,kernel_range_factor ,pivot)
 
     # Make wavelength array for sampling spectrum; same spacing, larger range
-    x = rangeQ(channelRange[ch][0] ,channelRange[ch][1] ,dlambda)
+    # with Timer('rangeQ',SHOWTIME):
+    if wrange_ is None: wrange_ = channelRange[ch]
+    x = rangeQ(wrange_[0]-kernel_range_factor*fwhm ,wrange_[1]+kernel_range_factor*fwhm ,dlambda)
 
     # Convolved spectrum as unitless array
+    # with Timer('spec2',SHOWTIME):
     spec2 = convolve(spectrum(x).value, kernel, mode='same', method='auto')/kernel.sum()
 
     # Convert array to spectrum class; Model will be Empirical1D even if input was compound model
+    # with Timer('newspec',SHOWTIME):
     if isinstance(spectrum ,SourceSpectrum):
         newspec = SourceSpectrum(Empirical1D, points=x, lookup_table=spec2*spectrum(1).unit, keep_neg=True)
     elif isinstance(spectrum ,SpectralElement):
@@ -276,7 +282,6 @@ def sharpess_scalefree(theta, x=0., beta=moffat_beta):
 
     return integral2/integral1**2
 
-
 def evaluate2Dinterp(f, x, y):
     '''Trick for quickly evaluating 2D interpolation on (x,y) pairs, not a 2D grid'''
     # https://stackoverflow.com/questions/47087109/evaluate-the-output-from-scipy-2d-interpolation-along-a-curve
@@ -295,10 +300,15 @@ def slitFractions(lam, w ,h ,FWHM ,pivot=500.*u.nm):
     return {'total':totalFrac, 'center':centerFrac, 'side':sideFrac}
 
 def slitEfficiency(w ,h ,FWHM ,pivot=500.*u.nm ,optics=None):
-    '''Compute fraction of PSF passing through slit and side slices, assuming Moffat PSF
-    Return as bandpass objects. 
+    '''Compute fraction of PSF passing through slit and side slices, assuming Moffat PSF'''
+    '''
+    w: slit width (unitful; angular projection on sky)
+    h: slit length (height) (unitful; angular projection on sky)
+    FWHM: seeing at pivot (unitful)
+    optics: Bandpass object for slicer side optics
 
-    optics = Bandpass object for slicer side optics'''
+    RETURNS: Dictionary of bandpass objects for 'center', 'side', and 'total'
+    '''
 
     # Slow function of wavelength so choose 10nm sampling
     lams = rangeQ(totalRange[0],totalRange[1],10*u.nm)
@@ -322,16 +332,16 @@ def slitEfficiency(w ,h ,FWHM ,pivot=500.*u.nm ,optics=None):
 
     return throughput_slicer
 
-def profileOnDetector(channel ,slit_w ,seeing ,pivot ,lams ,spatial_range=None ,bin_spatial=1):
+def profileOnDetector(channel ,slit_w ,seeing ,pivot ,lams ,spatial_range=None ,bin_spatial=1):  ###speed?
     ''' USE TABULATED MOFFAT INTEGRAL TO BACK OUT PIXELIZED SPATIAL PROFILES '''
     '''
 
-    channel_plate_scale: Astropy unit equivalence between arcsec/pixels.  See plate_scale
-    lams: wavelengths over which to sample the spatial profile
-    seeing:  FWHM of seeing profile at wavelength pivot
-    pivot:  pivot wavelength at which seeing is defined
-    slit_w:  width of slit in arcsec (user selected)
-    spatial_range:  how far to compute profile in the spatial direction
+    channel: single spectrograph channel to compute for
+    slit_w:  width of slit in arcsec
+    seeing:  FWHM of seeing profile at wavelength pivot (unitful)
+    pivot:  pivot wavelength at which seeing is defined (unitful)
+    lams: wavelengths over which to sample the spatial profile (Quantity)
+    spatial_range:  how far to compute profile in the spatial direction (unitful; angular projection)
     bin_spatial:  step size (number of spatial pixels) to sample spatial profile; simulates CCD binning
 
     returns: profile_slit{'center' , side' } - for each key, a numpy array of the pixelized slit profile with shape (Npix,Nlambda)
@@ -340,22 +350,16 @@ def profileOnDetector(channel ,slit_w ,seeing ,pivot ,lams ,spatial_range=None ,
              spatial direction should sum to 0.5 since we return only 1/2 the symmetric profile
     '''
 
-    # # Define wavelengths over which to sample the spatial profile
-    # # Profile is a slow function of wavelength; lambda_step_max is a lower bound for large ranges
-    # # For ranges < lambda_step_max, use half of range as step
-    # lambda_step_max = 10*u.nm  #maximum sampling of wavelength range
-    # lambda_step = min(lambda_step_max, (lambda_range.max()-lambda_range.min())/2.)
-    # lams = rangeQ(lambda_range[0],lambda_range[1]+lambda_step/2.,lambda_step)  # pad range max to ensure max is included
+    # Profile is a slow function of wavelength
 
     if spatial_range is None: spatial_range = 3*seeing
-    #lams = binCenters[channel]
 
     # Step through integer pixel widths from 0 (profile center) to some max spatial height
     assert bin_spatial - int(bin_spatial) == 0, "binning must be an integer"
     dx = (1*u.pix).to(u.arcsec ,equivalencies=plate_scale[channel]) * bin_spatial
     x=rangeQ(0*u.arcsec ,spatial_range ,dx)
 
-    # For each wavelength, integrate over the slit width and from origin to each pixel boundary
+    # For each wavelength, integrate over the slit width and from origin to each spatial pixel boundary
     # slitFractions() halves w and h in its integrals so double the pixel height argument
     # This returns Npix+1 dicts containing arrays of length Nlambda
     PSFsums=[slitFractions(lams, slit_w, 2*xi ,seeing) for xi in x]  #SLOW?
@@ -388,9 +392,14 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
     sky_at_slit:  dict of ky spectra for each channel, including all throughputs except slit/slicer
     throughput_slicerOptics: throughput of slicer optics (bandpass object)
     args:  argparse object with all the command line arguments
+
+    RETURNS
+    sourceSpectrumFPA[k][s]: dict of dict of spectra for channel k and slice s
+    skySpectrumFPA[k][s]: dict of dict of spectra for channel k and slice s
+    sharpness: dict of dict of arrays for channel k and slice s
     '''
 
-    binCenters = makeBinCenters(args.binspect, chanlist=chanlist ,wrange=args.wrange)
+    binCenters = args.binCenters_
     if args.noslicer or args.fastSNR:   slicer_paths = ['center']
     else:                               slicer_paths = ['center','side']
 
@@ -403,6 +412,7 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
     # profile_slit[k][lightpath] sums to 0.5 in each w bin and each path individually
     # profile_slit[k][lightpath] shape is (Nspatial, Nspectral)
 
+    # with Timer('profileOnDetector',SHOWTIME):
     profile_slit = { k: profileOnDetector(k ,slitw ,args.seeing[0] ,args.seeing[1] ,binCenters[k]
                                             ,spatial_range=None ,bin_spatial=args.binspat)
                     for k in chanlist }
@@ -420,6 +430,7 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
     skySpectrumFPA={}     #Flux PER spatial pixel, depends on slice bc of slicer optics
 
     # background flux/pixel ~ slit_width * spatial_pixel_height; we'll scale sky flux by this later
+    # with Timer('convolveLSF x 2' ,SHOWTIME):
     for k in chanlist:
         # area of sky projected onto 1 pixel in units of arcsec^2
         bg_pix_area = slitw * (1*u.pix).to('arcsec' ,equivalencies=plate_scale[k])
@@ -428,9 +439,9 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
         sourceSpectrumFPA[k]={}
         skySpectrumFPA[k]={}
 
-        for s in slicer_paths:
+        for s in slicer_paths:  ### COULD USE MULTIPROCESSING HERE; slicer paths and source/sky?
             spec = source_at_slit[k] * throughput_slicer[s]
-            sourceSpectrumFPA[k][s] = convolveLSF(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1])
+            sourceSpectrumFPA[k][s] = convolveLSF(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1] ,wrange_=args.wrange_)
 
             if args.fastSNR:
                 # scale signal down to 2 center pixels
@@ -440,122 +451,56 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
             # Scale sky flux by effective area: slit_width*pixel_height
             spec = sky_at_slit[k] * bg_pix_area
             if s == 'side': spec *= throughput_slicerOptics
-            skySpectrumFPA[k][s] = convolveLSF(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1])
+            skySpectrumFPA[k][s] = convolveLSF(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1] ,wrange_=args.wrange_)
 
     return sourceSpectrumFPA, skySpectrumFPA, sharpness
 
 def computeSNR(exptime, slitw, args, SSSfocalplane, allChans=False):
-        '''Compute SNR from inputs'''
-        '''
-        exptime: exposure time (unitful)
-        slitw: slit width (unitful)
-        args: argparse object containing user inputs
-        SSSfocalplane: function that returns source spectra, sky spectra, and sharpness at the FPA
-        allChans: boolean
-        
-        RETURNS:
-            allChans --> dictionary of SNR/wavelength bin for all channels
-            not allChans --> single SNR value            
-        '''
+    '''Compute SNR from inputs'''
+    '''
+    exptime: exposure time (unitful)
+    slitw: slit width (unitful)
+    args: argparse object containing user inputs
+    SSSfocalplane: function that returns source spectra, sky spectra, and sharpness at the FPA
+    allChans: boolean; if True, loop over all channels; otherwise, compute only for target SNR channel
     
-        # Only loop over channels we need
-        if allChans: chanlist = channels # master list from config
-        else: chanlist = (args.channel)  # user's input channel; use tuple not list to allow function caching
+    RETURNS:
+        allChans --> dictionary of SNR/wavelength bin for all channels
+        not allChans --> single SNR value; average over target SNR range
+    '''
 
-        binCenters = makeBinCenters(args.binspect, chanlist=chanlist ,wrange=args.wrange)
-        if args.noslicer or args.fastSNR:   slicer_paths = ['center']
-        else:                               slicer_paths = ['center','side']
+    # Only loop over channels we need
+    chanlist = tuple(args.binCenters_.keys())
 
-        sourceSpectrumFPA, skySpectrumFPA, sharpness = SSSfocalplane(slitw, chanlist)  #Cached
+    if args.noslicer or args.fastSNR:   slicer_paths = ['center']
+    else:                               slicer_paths = ['center','side']
 
-        ### TO SPEED UP, ^THESE^ SHOULD BE THE COUNTS PER PIXEL, NOT SPECTRUM FUNCTIONS ###
+    signal, bgvar, sharpness = SSSfocalplane(slitw)  #Cached
 
-        # Convert signal and background to counts (total per wavelength), including noise
-        # flux_unit='count' actually makes Spectrum object return counts/second,
-        #   so adjust units so we can scale by unitfull exptime
+    SNR2={}
+    SNR={}
 
-        signal={}  #Total fluence (counts) summed over all spatial pixels
-        bgvar={}   #Variance (counts) PER spatial pixel read
-        SNR2={}
-        SNR={}
+    for k in chanlist:
+        SNR2[k] = {}
 
-        for k in chanlist:
-            signal[k] = {}
-            bgvar[k] = {}
-            SNR2[k] = {}
+        for s in slicer_paths:
+            SIGNAL = signal[k][s]*exptime 
 
-            for s in slicer_paths:  ### These spectrum evals are the slow point in the main ETC loop - CAN WE CACHE?
-                signal[k][s] = sourceSpectrumFPA[k][s](binCenters[k] ,flux_unit='count' ,area=telescope_Area) \
-                                /u.s*exptime 
+            #account for more background per pixel if binning
+            NOISE2 = (bgvar[k][s]*exptime + darkcurrent[k]*exptime*u.pix) * args.binspat
+            NOISE2 += (readnoise[k]*u.pix)**2/u.ct  #read noise per read pixel is unchanged                                
+            NOISE2 = SIGNAL + NOISE2/sharpness[k][s]  #add shot noise
 
-                bgvar[k][s] = skySpectrumFPA[k][s](binCenters[k] ,flux_unit='count' ,area=telescope_Area) \
-                                /u.s*exptime
-                bgvar[k][s] += darkcurrent[k]*exptime*u.pix 
-                bgvar[k][s] *= args.binspat  #account for more background per pixel if binning
-                bgvar[k][s] += (readnoise[k]*u.pix)**2/u.ct  #read noise per read pixel is unchanged
-                                
-                SIGNAL = signal[k][s]
-                NOISE2 = SIGNAL + bgvar[k][s]/sharpness[k][s]
-                SNR2[k][s] = (SIGNAL**2/NOISE2 /u.ct).value  #**.5/u.ct**.5
+            SNR2[k][s] = (SIGNAL**2/NOISE2).to('ct').value
 
-            SNR[k] = deepcopy(SNR2[k]['center'])
-            if not (args.noslicer or args.fastSNR): SNR[k] += 2*SNR2[k]['side']
-            SNR[k] = SNR[k]**0.5
+        if args.noslicer or args.fastSNR: SNR[k] = SNR2[k]['center']**0.5
+        else: SNR[k] = (SNR2[k]['center']+2*SNR2[k]['side'])**0.5  # SNR combines in quadrature
 
-        # Return SNR data for each channel
-        if allChans: return SNR
+    # Return SNR data for each channel
+    if allChans: return SNR
 
-        # Return 1 number - the SNR caclulated from user input
-        else: return SNR[args.channel].mean()
-
-def computeSNR_test(exptime, slitw, args, SSSfocalplane, allChans=False):
-        '''Compute SNR from inputs'''
-        '''
-        exptime: exposure time (unitful)
-        slitw: slit width (unitful)
-        args: argparse object containing user inputs
-        SSSfocalplane: function that returns source spectra, sky spectra, and sharpness at the FPA
-        allChans: boolean
-        
-        RETURNS:
-            allChans --> dictionary of SNR/wavelength bin for all channels
-            not allChans --> single SNR value            
-        '''
-    
-        # Only loop over channels we need
-        if allChans: chanlist = channels # master list from config
-        else: chanlist = (args.channel)  # user's input channel; use tuple not list to allow function caching
-
-        binCenters = makeBinCenters(args.binspect, chanlist=chanlist)
-        if args.noslicer or args.fastSNR:   slicer_paths = ['center']
-        else:                               slicer_paths = ['center','side']
-
-        signal, bgvar, sharpness = SSSfocalplane(slitw, chanlist)  #Cached
-
-        SNR2={}
-        SNR={}
-
-        for k in chanlist:
-            SNR2[k] = {}
-
-            for s in slicer_paths:
-                SIGNAL = signal[k][s]*exptime 
-
-                #account for more background per pixel if binning
-                NOISE2 = (bgvar[k][s]*exptime + darkcurrent[k]*exptime*u.pix) * args.binspat
-                NOISE2 += (readnoise[k]*u.pix)**2/u.ct  #read noise per read pixel is unchanged                                
-                NOISE2 = SIGNAL + NOISE2/sharpness[k][s]  #add shot noise
-
-                SNR2[k][s] = (SIGNAL**2/NOISE2).to('ct').value
-
-            if args.noslicer or args.fastSNR: SNR[k] = SNR2[k]['center']**0.5
-            else: SNR[k] = (SNR2[k]['center']+2*SNR2[k]['side'])**0.5  # SNR combines in quadrature
-
-        # Return SNR data for each channel
-        if allChans: return SNR
-
-        # Return 1 number - the SNR caclulated from user input
-        else: return SNR[args.channel].mean()
+    # Return 1 number - the SNR caclulated from user input
+    else: return SNR[args.channel].mean()
 
 def plotAllChannels(spec ,lambda_range=None ,binned=False ,spec_allchan=None ,binCenters=None):
     '''
