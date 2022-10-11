@@ -18,7 +18,7 @@ class Timer:
 
         self._start_time = time.perf_counter()
 
-    def stop(self ,tag='Elapsed time'):
+    def stop(self ,tag=None):
         """Stop the timer, and report the elapsed time"""
         if self._start_time is None:
             raise TimerError(f"Timer is not running. Use .start() to start it")
@@ -26,8 +26,8 @@ class Timer:
         elapsed_time = time.perf_counter() - self._start_time
         self._start_time = None
         msg = self.msg
-        print(f"{msg}: {elapsed_time} seconds")
-
+        if tag is None: print(f"{msg}: {elapsed_time} seconds")
+        else: print(f"{tag}: {elapsed_time} seconds")
 
     def __enter__(self):
         """Start a new timer as a context manager"""
