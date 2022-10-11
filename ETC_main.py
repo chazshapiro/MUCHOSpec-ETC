@@ -92,8 +92,6 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False):
         # flux_unit='count' actually makes Spectrum object return counts/second,
         #   so adjust units so we can scale by unitfull exptime
 
-        # with Timer('flux to count',args.timer):
-
         signal = {k: {s: sourceSpectrumFPA[k][s](binCenters[k] ,flux_unit='count' ,area=telescope_Area)/u.s
                         for s in slicer_paths} for k in channels }
 
@@ -132,7 +130,6 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False):
     # SNR and SLIT are fixed; solve for EXPTIME
     elif ETCmode == 'SNR..SLIT':
 
-        # with Timer('expt solve',args.timer):
         slitw_result = args.slit
         SNR_result = SNR_target
 
@@ -156,7 +153,6 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False):
 
         t = exptime
 
-        # with Timer('Find 97',args.timer):
         ans = optimize.root_scalar(efffunc ,bracket=tuple(slit_w_range.to('arcsec').value) ,x0=args.seeing[0].to('arcsec').value)
 
         # Check for converged answer
@@ -165,7 +161,6 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False):
         else:
             raise RuntimeError('Max slit efficiency calculation did not converge')
 
-        # with Timer('slit solve',args.timer):
         # Solve for 'best' slitwidth (maximize SNR)
         def SNRfunc(slitw_arcsec):
             # print(slitw_arcsec)
@@ -295,9 +290,16 @@ if __name__ == "__main__":
     try: check_inputs_add_units(args)
     except Exception as e: parser.error(e)  # Exit gracefully
 
+    if args.timer:
+        from timer import Timer
+        tt = Timer()
+        tt.start()
+
     # Run the main program
     result = main(args ,quiet=False)
     print('')
+
+    if args.timer: tt.stop()
 
     # Plot SNR vs. wavelength if requested
     if args.plotSNR or args.plotdiag:

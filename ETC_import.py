@@ -14,8 +14,6 @@ from copy import deepcopy
 from scipy.signal import convolve, peak_widths
 
 from ETC.ETC_config import *
-from timer import Timer
-SHOWTIME=False
 
 # Setup paths to data that comes with the ETC package
 import ETC.path as p
@@ -237,20 +235,16 @@ def convolveLSF(spectrum, slit_w ,seeing ,ch ,kernel_upsample=10. ,kernel_range_
         "Input spectrum must be SourceSpectrum or SpectralElement class"
 
     # Make the convolution kernel
-    # with Timer('makeLSFkernel',SHOWTIME):
     kernel, fwhm , dlambda = makeLSFkernel(slit_w ,seeing ,ch ,kernel_upsample ,kernel_range_factor ,pivot)
 
     # Make wavelength array for sampling spectrum; same spacing, larger range
-    # with Timer('rangeQ',SHOWTIME):
     if wrange_ is None: wrange_ = channelRange[ch]
     x = rangeQ(wrange_[0]-kernel_range_factor*fwhm ,wrange_[1]+kernel_range_factor*fwhm ,dlambda)
 
     # Convolved spectrum as unitless array
-    # with Timer('spec2',SHOWTIME):
     spec2 = convolve(spectrum(x).value, kernel, mode='same', method='auto')/kernel.sum()
 
     # Convert array to spectrum class; Model will be Empirical1D even if input was compound model
-    # with Timer('newspec',SHOWTIME):
     if isinstance(spectrum ,SourceSpectrum):
         newspec = SourceSpectrum(Empirical1D, points=x, lookup_table=spec2*spectrum(1).unit, keep_neg=True)
     elif isinstance(spectrum ,SpectralElement):
@@ -412,7 +406,6 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
     # profile_slit[k][lightpath] sums to 0.5 in each w bin and each path individually
     # profile_slit[k][lightpath] shape is (Nspatial, Nspectral)
 
-    # with Timer('profileOnDetector',SHOWTIME):
     profile_slit = { k: profileOnDetector(k ,slitw ,args.seeing[0] ,args.seeing[1] ,binCenters[k]
                                             ,spatial_range=None ,bin_spatial=args.binspat)
                     for k in chanlist }
@@ -430,7 +423,6 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
     skySpectrumFPA={}     #Flux PER spatial pixel, depends on slice bc of slicer optics
 
     # background flux/pixel ~ slit_width * spatial_pixel_height; we'll scale sky flux by this later
-    # with Timer('convolveLSF x 2' ,SHOWTIME):
     for k in chanlist:
         # area of sky projected onto 1 pixel in units of arcsec^2
         bg_pix_area = slitw * (1*u.pix).to('arcsec' ,equivalencies=plate_scale[k])
