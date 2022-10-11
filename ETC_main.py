@@ -153,6 +153,7 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False):
 
         t = exptime
 
+        # Find "max" slit width containing 97% PSF
         ans = optimize.root_scalar(efffunc ,bracket=tuple(slit_w_range.to('arcsec').value) ,x0=args.seeing[0].to('arcsec').value)
 
         # Check for converged answer
@@ -167,19 +168,18 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False):
             ret = computeSNR(t, slitw_arcsec*u.arcsec, args, SSSfocalplane)
             return -ret
 
-        ans = optimize.minimize_scalar(SNRfunc ,bounds=slit_w_range.value 
-                                        ,method='bounded' ,options={'xatol':0.02}) # absolute tolerance in slitw
-        slitw_best_arcsec = ans.x
+        # When optimizing SNR, don't look beyond max slit width set by 97%
+        slitbound = slit_w_range.to('arcsec').value
+        if slitw_max_arcsec < slitbound[1]: slitbound[1] = slitw_max_arcsec
 
-        if slitw_best_arcsec <= slitw_max_arcsec:
-            SNR_result = -ans.fun
-            slitw_result = slitw_best_arcsec*u.arcsec
-        else:
-            SNR_result = -SNRfunc(slitw_max_arcsec)
-            slitw_result = slitw_max_arcsec*u.arcsec
+        ans = optimize.minimize_scalar(SNRfunc ,bounds=slitbound 
+                                        ,method='bounded' ,options={'xatol':0.02}) # absolute tolerance in slitw
+
+        SNR_result = -ans.fun
+        slitw_result = ans.x*u.arcsec
 
         if not quiet:
-            print('SLIT=%s  limit=%.2f  best=%.2f'%(slitw_result.round(2), slitw_max_arcsec, slitw_best_arcsec))
+            print('SLIT=%s  limit=%.2f  best=%.2f'%(slitw_result.round(2), slitw_max_arcsec, slitw_result.value))
 
     # SNR is fixed; solve for EXPTIME; for each EXPTIME tried, optimize SLIT
     # elif args.ETCmode == 'SNR':
