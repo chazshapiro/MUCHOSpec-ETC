@@ -151,7 +151,7 @@ def Extinction_atm(airmass):
     bandpass.model.lookup_table = bandpass.model.lookup_table**airmass
     return bandpass
 
-def makeLSFkernel(slit_w ,seeing ,ch ,kernel_upsample=10. ,kernel_range_factor=4. ,pivot=500*u.nm):
+def makeLSFkernel(slit_w ,seeing ,ch ,kernel_upsample=5. ,kernel_range_factor=4. ,pivot=500*u.nm):
     '''Placeholder until we have LSF data'''
     '''
     Approximates seeing for each channel as Gaussian with scale at channel center wavelength
