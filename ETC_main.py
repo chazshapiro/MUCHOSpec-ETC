@@ -69,7 +69,8 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False):
     sourceSpectrum = makeSource(args)
 
     # Normalize the sky; normalization is wrong but proportional to phot/s/wavelength, same as file
-    skySpec = skySpec0.normalize(args.skymag*uu.VEGAMAG ,band=skyFilter ,vegaspec=SourceSpectrum.from_vega() ) ###18.4ms
+    # skySpec = skySpec0.normalize(args.skymag*uu.VEGAMAG ,band=skyFilter ,vegaspec=SourceSpectrum.from_vega() ) ###18.4ms
+    skySpec = skySpec0.normalize(args.skymag*uu.VEGAMAG ,band=skyFilter ,vegaspec=vegaspec ) 
     # new units = VEGAMAG/arcsec^2 since skymag is really mag/arcsec^2
 
     # Load "throughput" for atmosphere
@@ -97,6 +98,15 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False):
 
         bgvar = {k: {s: skySpectrumFPA[k][s](binCenters[k] ,flux_unit='count' ,area=telescope_Area)/u.s
                         for s in slicer_paths} for k in channels }
+
+        # Slightly faster approximation for smooth functions
+        # signal = {k: {s: (sourceSpectrumFPA[k][s](binCenters[k])*telescope_Area/u.ph*u.ct
+        #                 *(1*u.pix).to('nm',  equivalencies=dispersion_scale_nobin[k])).decompose()
+        #                 for s in slicer_paths} for k in channels }
+
+        # bgvar = {k: {s: (skySpectrumFPA[k][s](binCenters[k])*telescope_Area/u.ph*u.ct
+        #                 *(1*u.pix).to('nm',  equivalencies=dispersion_scale_nobin[k])).decompose()
+        #                 for s in slicer_paths} for k in channels }
 
         return signal, bgvar, sharpness
 

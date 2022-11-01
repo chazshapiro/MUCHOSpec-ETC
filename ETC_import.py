@@ -15,6 +15,8 @@ from scipy.signal import convolve, peak_widths
 
 from ETC.ETC_config import *
 
+vegaspec = SourceSpectrum.from_vega()
+
 # Setup paths to data that comes with the ETC package
 import ETC.ETC_config as p
 from os import path
@@ -140,7 +142,7 @@ def makeSource(args):
                                                   #,wavelengths=sourceSpectrum.waveset)
     elif args.magsystem.upper() == 'VEGA':
         sourceSpectrum = sourceSpectrum.normalize(args.mag*uu.VEGAMAG ,band=norm_band 
-                                                  ,vegaspec=SourceSpectrum.from_vega())
+                                                  ,vegaspec=vegaspec)
 
     return sourceSpectrum
 
@@ -433,7 +435,7 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
 
         for s in slicer_paths:  ### COULD USE MULTIPROCESSING HERE; slicer paths and source/sky?
             spec = source_at_slit[k] * throughput_slicer[s]
-            sourceSpectrumFPA[k][s] = convolveLSF(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1] ,wrange_=args.wrange_)
+            sourceSpectrumFPA[k][s] = spec #convolveLSF(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1] ,wrange_=args.wrange_)
 
             if args.fastSNR:
                 # scale signal down to 2 center pixels
@@ -443,7 +445,7 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
             # Scale sky flux by effective area: slit_width*pixel_height
             spec = sky_at_slit[k] * bg_pix_area
             if s == 'side': spec *= throughput_slicerOptics
-            skySpectrumFPA[k][s] = convolveLSF(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1] ,wrange_=args.wrange_)
+            skySpectrumFPA[k][s] = spec #convolveLSF(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1] ,wrange_=args.wrange_)
 
     return sourceSpectrumFPA, skySpectrumFPA, sharpness
 
