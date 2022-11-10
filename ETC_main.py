@@ -69,16 +69,19 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False):
     sourceSpectrum = makeSource(args)
 
     # Normalize the sky; normalization is wrong but proportional to phot/s/wavelength, same as file
-    # skySpec = skySpec0.normalize(args.skymag*uu.VEGAMAG ,band=skyFilter ,vegaspec=SourceSpectrum.from_vega() ) ###18.4ms
-    skySpec = skySpec0.normalize(args.skymag*uu.VEGAMAG ,band=skyFilter ,vegaspec=vegaspec ) 
+    # skySpec = skySpec0.normalize(args.skymag*uu.VEGAMAG ,band=skyFilter ,vegaspec=vegaspec ) 
+    skySpec = skySpec0*1.575e-17 * 10.**((21.4-args.skymag)/2.5) ### HARDCODE NORMALIZED TO VEGA mag 21.4 JOHNSON V
     # new units = VEGAMAG/arcsec^2 since skymag is really mag/arcsec^2
 
     # Load "throughput" for atmosphere
     throughput_atm = Extinction_atm(args.airmass)
 
     # Source is modulated by atm, sky is not
-    sourceSpec_wTP = { k : sourceSpectrum * throughput_atm * TP[k] for k in channels }
-    skySpec_wTP = { k : skySpec * TP[k] for k in channels }
+    # sourceSpec_wTP = { k : sourceSpectrum * throughput_atm * TP[k] for k in channels }
+    # skySpec_wTP = { k : skySpec * TP[k] for k in channels }
+    sourceSpec_wTP = { k : make_empirical(sourceSpectrum*throughput_atm*TP[k], binCenters[k]) for k in channels }
+    skySpec_wTP = { k : make_empirical(skySpec*TP[k], binCenters[k]) for k in channels }
+
 
     '''  ALL SLIT DEPENDENCE BELOW THIS LINE '''
 
@@ -93,20 +96,20 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False):
         # flux_unit='count' actually makes Spectrum object return counts/second,
         #   so adjust units so we can scale by unitfull exptime
 
-        signal = {k: {s: sourceSpectrumFPA[k][s](binCenters[k] ,flux_unit='count' ,area=telescope_Area)/u.s
-                        for s in slicer_paths} for k in channels }
+        #signal = {k: {s: sourceSpectrumFPA[k][s](binCenters[k] ,flux_unit='count' ,area=telescope_Area)/u.s
+        #                for s in slicer_paths} for k in channels }
 
-        bgvar = {k: {s: skySpectrumFPA[k][s](binCenters[k] ,flux_unit='count' ,area=telescope_Area)/u.s
-                        for s in slicer_paths} for k in channels }
+        #bgvar = {k: {s: skySpectrumFPA[k][s](binCenters[k] ,flux_unit='count' ,area=telescope_Area)/u.s
+        #                for s in slicer_paths} for k in channels }
 
         # Slightly faster approximation for smooth functions
-        # signal = {k: {s: (sourceSpectrumFPA[k][s](binCenters[k])*telescope_Area/u.ph*u.ct
-        #                 *(1*u.pix).to('nm',  equivalencies=dispersion_scale_nobin[k])).decompose()
-        #                 for s in slicer_paths} for k in channels }
+        signal = {k: {s: (sourceSpectrumFPA[k][s](binCenters[k])*telescope_Area/u.ph*u.ct
+                        *(1*u.pix).to('nm',  equivalencies=dispersion_scale_nobin[k])).decompose()
+                        for s in slicer_paths} for k in channels }
 
-        # bgvar = {k: {s: (skySpectrumFPA[k][s](binCenters[k])*telescope_Area/u.ph*u.ct
-        #                 *(1*u.pix).to('nm',  equivalencies=dispersion_scale_nobin[k])).decompose()
-        #                 for s in slicer_paths} for k in channels }
+        bgvar = {k: {s: (skySpectrumFPA[k][s](binCenters[k])*telescope_Area/u.ph*u.ct
+                        *(1*u.pix).to('nm',  equivalencies=dispersion_scale_nobin[k])).decompose()
+                        for s in slicer_paths} for k in channels }
 
         return signal, bgvar, sharpness
 
@@ -149,7 +152,7 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False):
             # return computeSNR(t_sec*u.s, args.slit, args, SSSfocalplane) - SNR_target
 
         #ans = optimize.root_scalar(SNRfunc ,x0=1 ,x1=100)  ### Very bright stars may not converge here; try log-log
-        ans = optimize.root_scalar(SNRfunc ,x0=0 ,x1=3 ,xtol=.01)  ###52ms
+        ans = optimize.root_scalar(SNRfunc ,x0=0 ,x1=3 ,xtol=.01)
 
         # Check for converged answer
         if ans.converged:
@@ -164,13 +167,13 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False):
         t = exptime
 
         # Find "max" slit width containing 97% PSF
-        ans = optimize.root_scalar(efffunc ,bracket=tuple(slit_w_range.to('arcsec').value) ,x0=args.seeing[0].to('arcsec').value)
+        # ans = optimize.root_scalar(efffunc ,bracket=tuple(slit_w_range.to('arcsec').value) ,x0=args.seeing[0].to('arcsec').value)
 
         # Check for converged answer
-        if ans.converged:
-            slitw_max_arcsec = ans.root # unitless, in arcsec
-        else:
-            raise RuntimeError('Max slit efficiency calculation did not converge')
+        # if ans.converged:
+        #     slitw_max_arcsec = ans.root # unitless, in arcsec
+        # else:
+        #     raise RuntimeError('Max slit efficiency calculation did not converge')
 
         # Solve for 'best' slitwidth (maximize SNR)
         def SNRfunc(slitw_arcsec):
@@ -180,13 +183,14 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False):
 
         # When optimizing SNR, don't look beyond max slit width set by 97%
         slitbound = slit_w_range.to('arcsec').value
-        if slitw_max_arcsec < slitbound[1]: slitbound[1] = slitw_max_arcsec
+        # if slitw_max_arcsec < slitbound[1]: slitbound[1] = slitw_max_arcsec
 
         ans = optimize.minimize_scalar(SNRfunc ,bounds=slitbound 
-                                        ,method='bounded' ,options={'xatol':0.02}) # absolute tolerance in slitw
+                                        ,method='bounded' ,options={'xatol':0.05}) # absolute tolerance in slitw
 
         SNR_result = -ans.fun
         slitw_result = ans.x*u.arcsec
+        slitw_max_arcsec = slitbound[-1]
 
         if not quiet:
             print('SLIT=%s  limit=%.2f  best=%.2f'%(slitw_result.round(2), slitw_max_arcsec, slitw_result.value))

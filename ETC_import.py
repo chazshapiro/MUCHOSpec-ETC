@@ -6,7 +6,7 @@
 from numpy import array, arange, pi, hstack, vstack
 from pickle import load as pload  # Only needed in point source case
 from synphot import SourceSpectrum, SpectralElement  ### SLOW IMPORT!
-from synphot.models import Empirical1D, Gaussian1D, Box1D
+from synphot.models import Empirical1D, Gaussian1D, Box1D, ConstFlux1D
 import astropy.units as u
 import synphot.units as uu  # used in main code, not this file
 from functools import cache
@@ -110,9 +110,11 @@ def makeSource(args):
         label = 'blackbody '+str(args.tempK)
         sourceSpectrum = SourceSpectrum(BlackBodyNorm1D, temperature=args.tempK)
     elif args.model[0].lower() == 'constant':
-        from astropy.modeling.models import Const1D
         label = 'constant'
-        sourceSpectrum = SourceSpectrum(Const1D)
+        sourceSpectrum = SourceSpectrum(ConstFlux1D ,amplitude=args.mag*u.ABmag) # assume AB mag; units don't matter
+
+        # If spectrum is FLAT and mag is AB, then we are normalized by definition  ### Ignores further modeling!
+        if args.magsystem.upper() == 'AB': return sourceSpectrum
 
     else: raise Exception('Invalid source model')
 
@@ -145,6 +147,10 @@ def makeSource(args):
                                                   ,vegaspec=vegaspec)
 
     return sourceSpectrum
+
+def make_empirical(spec, lams):
+    '''convert spectrum model to lookup table'''
+    return SourceSpectrum(Empirical1D, points=lams, lookup_table=spec(lams), keep_neg=True)
 
 bandpass_atm = LoadCSVSpec(throughputFile_atm)
 def Extinction_atm(airmass):
@@ -288,9 +294,15 @@ def slitFractions(lam, w ,h ,FWHM ,pivot=500.*u.nm):
     
     ts = moffat_theta_factor * seeingLambda(lam ,FWHM ,pivot=pivot)  #specific to Moffat PSF
     #if ts.isscalar: ts=[ts]
+
+    wts=(w/ts).value
+    hts=(h/ts).value
+
+    if hasattr(hts, '__iter__'):
+        wts=array([wts]*len(hts))  # copy into a list if h is a list
         
-    centerFrac = evaluate2Dinterp(PSFsum2D, w/ts/2., h/ts/2.)
-    totalFrac = evaluate2Dinterp(PSFsum2D, 3.*w/ts/2., h/ts/2.)
+    centerFrac = evaluate2Dinterp(PSFsum2D, wts/2., hts/2.)
+    totalFrac = evaluate2Dinterp(PSFsum2D, 3.*wts/2., hts/2.)
 
     sideFrac = (totalFrac-centerFrac)/2.
     return {'total':totalFrac, 'center':centerFrac, 'side':sideFrac}
@@ -358,7 +370,8 @@ def profileOnDetector(channel ,slit_w ,seeing ,pivot ,lams ,spatial_range=None ,
     # For each wavelength, integrate over the slit width and from origin to each spatial pixel boundary
     # slitFractions() halves w and h in its integrals so double the pixel height argument
     # This returns Npix+1 dicts containing arrays of length Nlambda
-    PSFsums=[slitFractions(lams, slit_w, 2*xi ,seeing) for xi in x]  #SLOW?
+    # PSFsums=[slitFractions(lams, slit_w, 2*xi ,seeing) for xi in x]  #SLOW?
+    PSFsums=slitFractions(lams, slit_w, 2*x ,seeing)
 
     # Normalize to sum over full slit
     # This sums only from 0 to slit height, so double it below to get full slit value
@@ -367,9 +380,7 @@ def profileOnDetector(channel ,slit_w ,seeing ,pivot ,lams ,spatial_range=None ,
     # Subtract sums at adjacent pixel boundaries to get sum in each pixel
     profile_slit={}
     for k in ['center','side']:
-
-        #profile_slit[k]=array([(pfs1-pfs0)/profile_norm[k] for pfs0, pfs1 in zip(PSFsums[:-1][k],PSFsums[1:][k]) ]) 
-        profile_slit[k]=array([(PSFsums[i+1][k]-PSFsums[i][k])/(2*profile_norm[k]) for i in range(len(x)-1)])
+        profile_slit[k]=(PSFsums[k][1:]-PSFsums[k][:-1])/2/profile_norm[k]
         # NB doubled normalization cf. above note
 
     # shapes are (Npix, Nlambda)
@@ -408,7 +419,7 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
     # profile_slit[k][lightpath] sums to 0.5 in each w bin and each path individually
     # profile_slit[k][lightpath] shape is (Nspatial, Nspectral)
 
-    profile_slit = { k: profileOnDetector(k ,slitw ,args.seeing[0] ,args.seeing[1] ,binCenters[k]
+    profile_slit = { k: profileOnDetector(k ,slitw ,args.seeing[0] ,args.seeing[1] ,binCenters[k].mean() ### If not using mean, must change slitFractions() to allow lambda arrays
                                             ,spatial_range=None ,bin_spatial=args.binspat)
                     for k in chanlist }
 
