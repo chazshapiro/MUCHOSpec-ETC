@@ -82,6 +82,9 @@ parser.add_argument('-plotdiag', action='store_true', help=help)
 help = 'Print timing info'
 parser.add_argument('-timer', action='store_true', help=help)
 
+help = 'Use hi-res calculations to improve SNR accuracy'
+parser.add_argument('-hires', action='store_true', help=help)
+
 obsparam = parser.add_argument_group('REQUIRED Observation conditions')
 
 help = 'Mode of setting the slit width (string) and value for that mode (float).  '
@@ -113,7 +116,8 @@ sourceparam_req.add_argument('-magfilter', type=str, choices=choices, required=T
 
 sourceparam_add = parser.add_argument_group('Additional source parameters')
 
-help = 'Astronomical source model.  Examples: "constant" (default), "blackbody 5000", "template spiral_001"'
+help = 'Astronomical source model.  Examples: "constant" (default), "blackbody 5000", "template spiral_001".  \
+The "constant" model ignores other parameters in this group.'
 sourceparam_add.add_argument('-model', nargs='+', required=False, default=['constant'], help=help)
 
 help = 'Redshift'

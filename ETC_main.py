@@ -77,10 +77,13 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False):
     throughput_atm = Extinction_atm(args.airmass)
 
     # Source is modulated by atm, sky is not
-    # sourceSpec_wTP = { k : sourceSpectrum * throughput_atm * TP[k] for k in channels }
-    # skySpec_wTP = { k : skySpec * TP[k] for k in channels }
-    sourceSpec_wTP = { k : make_empirical(sourceSpectrum*throughput_atm*TP[k], binCenters[k]) for k in channels }
-    skySpec_wTP = { k : make_empirical(skySpec*TP[k], binCenters[k]) for k in channels }
+    if args.hires:
+        sourceSpec_wTP = { k : sourceSpectrum * throughput_atm * TP[k] for k in channels }
+        skySpec_wTP = { k : skySpec * TP[k] for k in channels }
+    else:
+        # Replace analytic models with lookup tables  ### just as fast to make tables hi-res??
+        sourceSpec_wTP = { k : make_empirical(sourceSpectrum*throughput_atm*TP[k], binCenters[k]) for k in channels }
+        skySpec_wTP = { k : make_empirical(skySpec*TP[k], binCenters[k]) for k in channels }
 
 
     '''  ALL SLIT DEPENDENCE BELOW THIS LINE '''
@@ -96,20 +99,23 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False):
         # flux_unit='count' actually makes Spectrum object return counts/second,
         #   so adjust units so we can scale by unitfull exptime
 
-        #signal = {k: {s: sourceSpectrumFPA[k][s](binCenters[k] ,flux_unit='count' ,area=telescope_Area)/u.s
-        #                for s in slicer_paths} for k in channels }
+        if args.hires:
+            # Integrate spectrum over each bin
+            signal = {k: {s: sourceSpectrumFPA[k][s](binCenters[k] ,flux_unit='count' ,area=telescope_Area)/u.s
+                           for s in slicer_paths} for k in channels }
 
-        #bgvar = {k: {s: skySpectrumFPA[k][s](binCenters[k] ,flux_unit='count' ,area=telescope_Area)/u.s
-        #                for s in slicer_paths} for k in channels }
+            bgvar = {k: {s: skySpectrumFPA[k][s](binCenters[k] ,flux_unit='count' ,area=telescope_Area)/u.s
+                           for s in slicer_paths} for k in channels }
 
-        # Slightly faster approximation for smooth functions
-        signal = {k: {s: (sourceSpectrumFPA[k][s](binCenters[k])*telescope_Area/u.ph*u.ct
-                        *(1*u.pix).to('nm',  equivalencies=dispersion_scale_nobin[k])).decompose()
-                        for s in slicer_paths} for k in channels }
+        else:
+            # Slightly faster approximation for smooth functions; assume spectrum is constant across bins
+            signal = {k: {s: (sourceSpectrumFPA[k][s](binCenters[k])*telescope_Area/u.ph*u.ct
+                            *(1*u.pix).to('nm',  equivalencies=dispersion_scale_nobin[k])).decompose()
+                            for s in slicer_paths} for k in channels }
 
-        bgvar = {k: {s: (skySpectrumFPA[k][s](binCenters[k])*telescope_Area/u.ph*u.ct
-                        *(1*u.pix).to('nm',  equivalencies=dispersion_scale_nobin[k])).decompose()
-                        for s in slicer_paths} for k in channels }
+            bgvar = {k: {s: (skySpectrumFPA[k][s](binCenters[k])*telescope_Area/u.ph*u.ct
+                            *(1*u.pix).to('nm',  equivalencies=dispersion_scale_nobin[k])).decompose()
+                            for s in slicer_paths} for k in channels }
 
         return signal, bgvar, sharpness
 
@@ -151,7 +157,7 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False):
             return log( computeSNR(10**t_sec*u.s, args.slit, args, SSSfocalplane) / SNR_target)
             # return computeSNR(t_sec*u.s, args.slit, args, SSSfocalplane) - SNR_target
 
-        #ans = optimize.root_scalar(SNRfunc ,x0=1 ,x1=100)  ### Very bright stars may not converge here; try log-log
+        #ans = optimize.root_scalar(SNRfunc ,x0=1 ,x1=100)  # Very bright stars may not converge here; try log-log
         ans = optimize.root_scalar(SNRfunc ,x0=0 ,x1=3 ,xtol=.01)
 
         # Check for converged answer

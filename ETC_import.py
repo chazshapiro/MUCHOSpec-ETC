@@ -101,20 +101,21 @@ def makeSource(args):
     ''' Load the source model, mix with astrophysics, normalize.
     Returns a spectrum object for the source, normalized at the top of the atmosphere
     '''
+    needNorm = True  # Save time by keeping track of whether we really need to normalize
+
     # Load source spectrum model
-    if args.model[0].lower() == 'template':
+    if args.model[0].lower() == 'constant':
+        label = 'constant'
+        sourceSpectrum = SourceSpectrum(ConstFlux1D ,amplitude=args.mag*u.ABmag) # assume AB mag; units don't matter
+        needNorm = False  # If spectrum is FLAT and mag is AB, then we are now normalized by definition
+
+    elif args.model[0].lower() == 'template':
         label = args.srctemp.split('/')[-1]  #used for plot labels
         sourceSpectrum = SourceSpectrum.from_file(args.srctemp)
     elif args.model[0].lower() == 'blackbody':
         from synphot.models import BlackBodyNorm1D
         label = 'blackbody '+str(args.tempK)
         sourceSpectrum = SourceSpectrum(BlackBodyNorm1D, temperature=args.tempK)
-    elif args.model[0].lower() == 'constant':
-        label = 'constant'
-        sourceSpectrum = SourceSpectrum(ConstFlux1D ,amplitude=args.mag*u.ABmag) # assume AB mag; units don't matter
-
-        # If spectrum is FLAT and mag is AB, then we are normalized by definition  ### Ignores further modeling!
-        if args.magsystem.upper() == 'AB': return sourceSpectrum
 
     else: raise Exception('Invalid source model')
 
@@ -127,24 +128,26 @@ def makeSource(args):
         from synphot import ReddeningLaw
         redlaw = ReddeningLaw.from_extinction_model(args.extmodel)
         sourceSpectrum *= SpectralElement(redlaw.extinction_curve(args.E_BV))
+        needNorm = True  # Spectrum is no longer flat
 
-    # Load bandpass for normalization
-    if args.magfilter.lower() == 'user':
-        # Use the wavelength range from command line
-        from synphot.models import Box1D
-        norm_band = SpectralElement(Box1D, amplitude=1, x_0=args.wrange.mean(), 
-                                    width=(args.wrange[1]-args.wrange[0]) )
-    else:
-        norm_band = SpectralElement.from_filter('johnson_'+args.magfilter.lower())
+    if needNorm:
+        # Load bandpass for normalization
+        if args.magfilter.lower() == 'user':
+            # Use the wavelength range from command line
+            from synphot.models import Box1D
+            norm_band = SpectralElement(Box1D, amplitude=1, x_0=args.wrange.mean(), 
+                                        width=(args.wrange[1]-args.wrange[0]) )
+        else:
+            norm_band = SpectralElement.from_filter('johnson_'+args.magfilter.lower())
 
-    # Normalize source - this is done after all astrophysical adjustments and before the atmosphere
-    # So we are fixing the magnitude "at the top of the atmosphere"
-    if args.magsystem.upper() == 'AB':
-        sourceSpectrum = sourceSpectrum.normalize(args.mag*u.ABmag ,band=norm_band )
-                                                  #,wavelengths=sourceSpectrum.waveset)
-    elif args.magsystem.upper() == 'VEGA':
-        sourceSpectrum = sourceSpectrum.normalize(args.mag*uu.VEGAMAG ,band=norm_band 
-                                                  ,vegaspec=vegaspec)
+        # Normalize source - this is done after all astrophysical adjustments and before the atmosphere
+        # So we are fixing the magnitude "at the top of the atmosphere"
+        if args.magsystem.upper() == 'AB':
+            sourceSpectrum = sourceSpectrum.normalize(args.mag*u.ABmag ,band=norm_band )
+                                                      #,wavelengths=sourceSpectrum.waveset)
+        elif args.magsystem.upper() == 'VEGA':
+            sourceSpectrum = sourceSpectrum.normalize(args.mag*uu.VEGAMAG ,band=norm_band 
+                                                      ,vegaspec=vegaspec)
 
     return sourceSpectrum
 
@@ -219,7 +222,7 @@ def makeLSFkernel(slit_w ,seeing ,ch ,kernel_upsample=5. ,kernel_range_factor=4.
 
     return kernel, fwhm, dlambda
 
-def convolveLSF(spectrum, slit_w ,seeing ,ch ,kernel_upsample=10. ,kernel_range_factor=4. ,pivot=500*u.nm ,wrange_=None):  ###SPEED; side slice LSF is sus
+def convolveLSF(spectrum, slit_w ,seeing ,ch ,kernel_upsample=10. ,kernel_range_factor=4. ,pivot=500*u.nm ,wrange_=None):  ### side slice LSF is sus
     '''Convolve spectrum at focal plane with LSF'''
     '''
     Approximates seeing for each channel as Gaussian with scale at channel center wavelength
@@ -340,7 +343,7 @@ def slitEfficiency(w ,h ,FWHM ,pivot=500.*u.nm ,optics=None):
 
     return throughput_slicer
 
-def profileOnDetector(channel ,slit_w ,seeing ,pivot ,lams ,spatial_range=None ,bin_spatial=1):  ###speed?
+def profileOnDetector(channel ,slit_w ,seeing ,pivot ,lams ,spatial_range=None ,bin_spatial=1):
     ''' USE TABULATED MOFFAT INTEGRAL TO BACK OUT PIXELIZED SPATIAL PROFILES '''
     '''
 
@@ -444,9 +447,10 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
         sourceSpectrumFPA[k]={}
         skySpectrumFPA[k]={}
 
-        for s in slicer_paths:  ### COULD USE MULTIPROCESSING HERE; slicer paths and source/sky?
+        for s in slicer_paths:
             spec = source_at_slit[k] * throughput_slicer[s]
-            sourceSpectrumFPA[k][s] = spec #convolveLSF(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1] ,wrange_=args.wrange_)
+            if args.hires: spec = convolveLSF(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1] ,wrange_=args.wrange_)
+            sourceSpectrumFPA[k][s] = spec 
 
             if args.fastSNR:
                 # scale signal down to 2 center pixels
@@ -456,7 +460,8 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
             # Scale sky flux by effective area: slit_width*pixel_height
             spec = sky_at_slit[k] * bg_pix_area
             if s == 'side': spec *= throughput_slicerOptics
-            skySpectrumFPA[k][s] = spec #convolveLSF(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1] ,wrange_=args.wrange_)
+            if args.hires: spec = convolveLSF(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1] ,wrange_=args.wrange_)
+            skySpectrumFPA[k][s] = spec
 
     return sourceSpectrumFPA, skySpectrumFPA, sharpness
 
