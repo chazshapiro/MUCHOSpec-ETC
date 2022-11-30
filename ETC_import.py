@@ -399,7 +399,7 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
     INPUTS
     slitw:  slit width (unitful)
     source_at_slit: dict of source spectra for each channel, including effects of atm and all throughputs except slit/slicer
-    sky_at_slit:  dict of ky spectra for each channel, including all throughputs except slit/slicer
+    sky_at_slit:  dict of sky spectra for each channel, including all throughputs except slit/slicer
     throughput_slicerOptics: throughput of slicer optics (bandpass object)
     args:  argparse object with all the command line arguments
 
@@ -408,6 +408,9 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
     skySpectrumFPA[k][s]: dict of dict of spectra for channel k and slice s
     sharpness: dict of dict of arrays for channel k and slice s
     '''
+
+    if args.extended is not None:
+        return applySlit_extended(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args ,chanlist)
 
     binCenters = args.binCenters_
     if args.noslicer or args.fastSNR:   slicer_paths = ['center']
@@ -448,13 +451,59 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
         skySpectrumFPA[k]={}
 
         for s in slicer_paths:
-            spec = source_at_slit[k] * throughput_slicer[s]
+            spec = source_at_slit[k] * throughput_slicer[s]  ### This encodes slit loss and optics
             if args.hires: spec = convolveLSF(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1] ,wrange_=args.wrange_)
             sourceSpectrumFPA[k][s] = spec 
 
             if args.fastSNR:
                 # scale signal down to 2 center pixels
                 sourceSpectrumFPA[k][s] *= SpectralElement(Empirical1D, points=binCenters[k], lookup_table=2*profile_slit[k][s][0])
+
+            # Doesn't include atmosphere or slitloss for sky flux
+            # Scale sky flux by effective area: slit_width*pixel_height
+            spec = sky_at_slit[k] * bg_pix_area
+            if s == 'side': spec *= throughput_slicerOptics
+            if args.hires: spec = convolveLSF(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1] ,wrange_=args.wrange_)
+            skySpectrumFPA[k][s] = spec
+
+    return sourceSpectrumFPA, skySpectrumFPA, sharpness
+
+def applySlit_extended(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args ,chanlist):
+    '''same as applySlit for extended source'''
+
+    binCenters = args.binCenters_
+    if args.noslicer or args.fastSNR:   slicer_paths = ['center']
+    else:                               slicer_paths = ['center','side']
+
+    if args.fastSNR: Npix_spatial = 2
+    elif args.extended != None: Npix_spatial = args.extended
+    else: Npix_spatial = None
+
+    sharpness = { k : { s: 
+        1./array([Npix_spatial]*len(binCenters[k]))  #1/sharpness = [N, N, N...]
+        for s in slicer_paths }  for k in chanlist }
+
+    # Multiply source spectrum by all throughputs, atmosphere, slit loss, and convolve with LSF
+    # These are the flux densities at the focal plane array (FPA)
+    # Side slice throughputs are for a SINGLE side slice
+
+    sourceSpectrumFPA={}  #Total flux summed over all spatial pixels and used slices
+    skySpectrumFPA={}     #Flux PER spatial pixel, depends on slice bc of slicer optics
+
+    # background flux/pixel ~ slit_width * spatial_pixel_height; we'll scale sky flux by this later
+    for k in chanlist:
+        # area of sky projected onto 1 pixel in units of arcsec^2
+        bg_pix_area = slitw * (1*u.pix).to('arcsec' ,equivalencies=plate_scale[k])
+        bg_pix_area = bg_pix_area.to('arcsec2').value
+
+        sourceSpectrumFPA[k]={}
+        skySpectrumFPA[k]={}
+
+        for s in slicer_paths:
+            spec = source_at_slit[k] * bg_pix_area * Npix_spatial  # signal per pixel * N_pixels
+            if s == 'side': spec *= throughput_slicerOptics
+            if args.hires: spec = convolveLSF(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1] ,wrange_=args.wrange_)
+            sourceSpectrumFPA[k][s] = spec 
 
             # Doesn't include atmosphere or slitloss for sky flux
             # Scale sky flux by effective area: slit_width*pixel_height
