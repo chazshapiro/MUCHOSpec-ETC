@@ -130,7 +130,7 @@ help = 'Extinction model; default="mwavg" (Diffuse Milky Way, R_V=3.1)'
 sourceparam_add.add_argument('-extmodel', type=str, default='mwavg', help=help)
 
 help = 'Assume an extended source with constant surface brightness; -mag will be interpreted as mag/arcsec^2; '
-help += 'user chooses an integer number of spatial pixels for which to extract signal in each slice.'
+help += 'user chooses an integer number of spatial pixels for which to extract signal (same for all slices).'
 sourceparam_add.add_argument('-extended', type=posint, default=None, help=help)
 
 # ETC parameter summary for external modules

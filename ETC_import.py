@@ -409,28 +409,37 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
     sharpness: dict of dict of arrays for channel k and slice s
     '''
 
-    if args.extended is not None:
-        return applySlit_extended(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args ,chanlist)
+    POINTSOURCE = (args.extended is None)
+
+    # if not POINTSOURCE:
+    #     return applySlit_extended(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args ,chanlist)
 
     binCenters = args.binCenters_
     if args.noslicer or args.fastSNR:   slicer_paths = ['center']
     else:                               slicer_paths = ['center','side']
 
-    # Combine slit fractions arrays with Optics to make throughput elements
-    throughput_slicer = slitEfficiency(slitw ,slit_h ,args.seeing[0] ,pivot=args.seeing[1] ,optics=throughput_slicerOptics)
+    if POINTSOURCE:
+        # Combine slit fractions arrays with Optics to make throughput elements
+        throughput_slicer = slitEfficiency(slitw ,slit_h ,args.seeing[0] ,pivot=args.seeing[1] ,optics=throughput_slicerOptics)
 
-    # Compute pixelized spatial profiles for a flat spectrum
-    # Multiplying spectra by these profiles "distributes" counts over pixels in spatial direction
-    # THIS IS ONLY HALF THE (symmetric) PROFILE, so it is normalized to 0.5
-    # profile_slit[k][lightpath] sums to 0.5 in each w bin and each path individually
-    # profile_slit[k][lightpath] shape is (Nspatial, Nspectral)
+        # Compute pixelized spatial profiles for a flat spectrum
+        # Multiplying spectra by these profiles "distributes" counts over pixels in spatial direction
+        # THIS IS ONLY HALF THE (symmetric) PROFILE, so it is normalized to 0.5
+        # profile_slit[k][lightpath] sums to 0.5 in each w bin and each path individually
+        # profile_slit[k][lightpath] shape is (Nspatial, Nspectral)
 
-    profile_slit = { k: profileOnDetector(k ,slitw ,args.seeing[0] ,args.seeing[1] ,binCenters[k].mean() ### If not using mean, must change slitFractions() to allow lambda arrays
-                                            ,spatial_range=None ,bin_spatial=args.binspat)
-                    for k in chanlist }
+        profile_slit = { k: profileOnDetector(k ,slitw ,args.seeing[0] ,args.seeing[1] ,binCenters[k].mean() ### If not using mean, must change slitFractions() to allow lambda arrays
+                                                ,spatial_range=None ,bin_spatial=args.binspat)
+                        for k in chanlist }
+        Npix_spatial = None
+
+    else:
+        Npix_spatial = args.extended
+
+    if args.fastSNR: Npix_spatial = 2  # overrides extended source size
 
     sharpness = { k : { s: 
-        array([0.5]*len(binCenters[k])) if args.fastSNR  #1/sharpness = [2, 2, 2, 2...]
+        1./array([Npix_spatial]*len(binCenters[k])) if Npix_spatial is not None # 1/sharpness = [N, N, N...]
         else 2*(profile_slit[k][s]**2).sum(0)
         for s in slicer_paths }  for k in chanlist }
 
@@ -438,7 +447,7 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
     # These are the flux densities at the focal plane array (FPA)
     # Side slice throughputs are for a SINGLE side slice
 
-    sourceSpectrumFPA={}  #Total flux summed over all spatial pixels and used slices
+    sourceSpectrumFPA={}  #Total flux summed over all spatial pixels and used slices  ### true for extended?
     skySpectrumFPA={}     #Flux PER spatial pixel, depends on slice bc of slicer optics
 
     # background flux/pixel ~ slit_width * spatial_pixel_height; we'll scale sky flux by this later
@@ -451,14 +460,22 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
         skySpectrumFPA[k]={}
 
         for s in slicer_paths:
-            spec = source_at_slit[k] * throughput_slicer[s]  ### This encodes slit loss and optics
+            if POINTSOURCE:
+                spec = source_at_slit[k] * throughput_slicer[s]  # This applies slit loss and optics
+
+                # scale signal down to 2 center pixels
+                if args.fastSNR:
+                    spec *= SpectralElement(Empirical1D, points=binCenters[k], lookup_table=2*profile_slit[k][s][0])
+
+            else:
+                # extended source is normalized to mag/arcsec^2, so multiplying by arcsec^2/px gives signal in 1 pixel
+                spec = source_at_slit[k] * bg_pix_area * Npix_spatial  # signal per pixel * N_pixels
+                if s == 'side': spec *= throughput_slicerOptics
+
             if args.hires: spec = convolveLSF(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1] ,wrange_=args.wrange_)
             sourceSpectrumFPA[k][s] = spec 
 
-            if args.fastSNR:
-                # scale signal down to 2 center pixels
-                sourceSpectrumFPA[k][s] *= SpectralElement(Empirical1D, points=binCenters[k], lookup_table=2*profile_slit[k][s][0])
-
+        for s in slicer_paths:
             # Doesn't include atmosphere or slitloss for sky flux
             # Scale sky flux by effective area: slit_width*pixel_height
             spec = sky_at_slit[k] * bg_pix_area
