@@ -4,7 +4,7 @@
 # Notes on SNR estimation: https://www.stsci.edu/instruments/wfpc2/Wfpc2_hand/HTML/W2_61.html
 
 # TODOS: K-CORRECTION
-#        USER SED, EXTENDED SOURCES (mag/arcsec**2), HOST GALAXY (mag/area)
+#        USER SED, HOST GALAXY (mag/area)
 #        MOON PHASE/POSITION, ZODIACAL LIGHT
 #        Unique FILENAMES for plots?
 #
