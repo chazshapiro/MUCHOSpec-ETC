@@ -109,12 +109,13 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False):
 
         else:
             # Slightly faster approximation for smooth functions; assume spectrum is constant across bins
+            # binspect is the width of the bin in pixels
             signal = {k: {s: (sourceSpectrumFPA[k][s](binCenters[k])*telescope_Area/u.ph*u.ct
-                            *(1*u.pix).to('nm',  equivalencies=dispersion_scale_nobin[k])).decompose()
+                            *(args.binspect*u.pix).to('nm',  equivalencies=dispersion_scale_nobin[k])).decompose()
                             for s in slicer_paths} for k in channels }
 
             bgvar = {k: {s: (skySpectrumFPA[k][s](binCenters[k])*telescope_Area/u.ph*u.ct
-                            *(1*u.pix).to('nm',  equivalencies=dispersion_scale_nobin[k])).decompose()
+                            *(args.binspect*u.pix).to('nm',  equivalencies=dispersion_scale_nobin[k])).decompose()
                             for s in slicer_paths} for k in channels }
 
         return signal, bgvar, sharpness
