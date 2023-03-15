@@ -4,6 +4,15 @@
 
 import astropy.units as u
 from astropy.table import QTable
+from os import path
+
+ETCdir = path.dirname(__file__)
+sourcesdir = ETCdir+'/sources/'
+CSVdir = ETCdir+'/CSV/'
+PSFsum2DFile = ETCdir+'/PSFsum2D.pkl' #pre-tabulated integral of PSF over slit and side slices
+
+obs_loc = {'latitude':33.35, 'longitude':-116.85, 'height':1706}  # deg, deg, meters;  Palomar
+sky_airmass_limit=8
 
 slit_w_range=[0.2,10.]*u.arcsec
 slit_h=60.*u.arcsec
@@ -17,8 +26,6 @@ moffat_theta_factor = 0.5/(2**(1./moffat_beta) - 1.)**.5  # theta = factor*seein
 
 # Paths to data for this instrument
 
-# Leave CSVdir=None to use the default data in the repo
-CSVdir=None #'/home/developer/Software/ETC/CSV/'
 default_waveunit=u.nm  #assume units for all CSV files
 
 skybackground_file = 'Gemini_skybg_50_10.txt'  #placeholder sky model

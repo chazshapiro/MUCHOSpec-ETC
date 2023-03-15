@@ -1,7 +1,7 @@
 import argparse
 from sys import path
 from numpy.ma import is_masked
-from ETC.ETC_import import sourcesdir
+from ETC.ETC_config import sourcesdir
 
 # Hack to avoid exiting the program when there's a parser error
 class ArgumentParserError(Exception): pass
@@ -46,8 +46,7 @@ def slitfloat(value): # require slit in slit_w_range
 	    raise argparse.ArgumentTypeError("slitwidth must be in %s" % (slit_w_range))
 	return fvalue
 
-SNRparam = parser.add_argument_group('SNR parameters')
-
+## POSITIONAL ARGUMENTS ##
 from ETC.ETC_config import channels
 help = 'Spectrograph channel used for SNR'
 parser.add_argument('channel', type=str, choices=channels ,help=help)
@@ -61,6 +60,7 @@ parser.add_argument('ETCmode', type=str, choices=['SNR','EXPTIME','SET'], help=h
 help = 'Value of the fixed parameter: SNR (dimensionless) or EXPTIME (s)'
 parser.add_argument('ETCfixed', type=posfloat, help=help)
 
+## OPTIONAL KEYWORDS ##
 help = 'On-chip binning along dispersion/spectral axis'
 parser.add_argument('-binspect','-bindisp', type=posint, default=1, help=help)
 
@@ -85,6 +85,7 @@ parser.add_argument('-timer', action='store_true', help=help)
 help = 'Use hi-res calculations to improve SNR accuracy'
 parser.add_argument('-hires', action='store_true', help=help)
 
+## REQUIRED KEYWORDS ##
 obsparam = parser.add_argument_group('REQUIRED Observation conditions')
 
 help = 'Mode of setting the slit width (string) and value for that mode (float).  '
@@ -98,9 +99,16 @@ obsparam.add_argument('-seeing', type=posfloat, nargs=2, metavar=('SEEING','PIVO
 help = 'Airmass (dimensionless)'
 obsparam.add_argument('-airmass', type=float, required=True, help=help)
 
-help = 'Sky brightness magnitude per arcsec^2 (VEGA, johnson_v)'
-obsparam.add_argument('-skymag', type=float, required=True, help=help)
+## SKY BACKGROUND KEYWORDS ##
+skyparam = parser.add_mutually_exclusive_group(required=True)
 
+help = 'Sky brightness magnitude per arcsec^2 (VEGA, johnson_v); faster but inaccurate compared to -skycoord'
+skyparam.add_argument('-skymag', type=float, default=21.4, help=help)
+
+help = 'RA (deg), DEC (deg), MJD; required for sky background model'
+skyparam.add_argument('-skycoord', nargs=3, type=float, metavar=('RA','DEC','MJD'), help=help)
+
+## REQUIRED SOURCE KEYWORDS ##
 sourceparam_req = parser.add_argument_group('REQUIRED Source parameters')
 
 help = 'Source magnitude (observed at top of atmosphere)'
@@ -114,6 +122,7 @@ help = '''Johnson filter (UBVRIJK) to define source magnitude. Use FILTER="user"
 choices = [c for c in 'UBVRIJK'] + ['user','USER','User']
 sourceparam_req.add_argument('-magfilter', type=str, choices=choices, required=True, help=help)
 
+## OPTIONAL SOURCE KEYWORDS ##
 sourceparam_add = parser.add_argument_group('Additional source parameters')
 
 help = 'Astronomical source model.  Examples: "constant" (default), "blackbody 5000", "template spiral_001".  \
@@ -138,6 +147,7 @@ etc_args = ['channel', 'wrange','exptime'] # Order is important  #, 'SNR' now co
 etc_kwargs = ['slitwidth', 'airmass', 'skymag','seeing', 'mag', 'magsystem','magfilter']
 etc_optargs = ['srcmodel']
 etc_optkwargs = ['binspect','binspat'] #, 'fast_SNR', -noslicer ; these take no arguments  ### -binspat ,-binspect
+etc_skykwargs = ['RA','DECL','MJD']
 
 def formETCcommand(row):  ### Maybe make command as list not a big string  ### standardize 1 col per kw; make OTM reformat
 	'''Form the ETC command line string from a dict created from astropy table row'''
@@ -149,7 +159,9 @@ def formETCcommand(row):  ### Maybe make command as list not a big string  ### s
 	cmd_optargs = [ row[k] for k in cols_exist if not is_masked(row[k]) ]
 
 	cols_exist = (set(etc_optkwargs) & set(row.keys()))
-	cmd_optkwargs = [ '-%s %s'%(k,row[k]) for k in cols_exist if not is_masked(row[k]) ]	
+	cmd_optkwargs = [ '-%s %s'%(k,row[k]) for k in cols_exist if not is_masked(row[k]) ]
+
+
 
 	return cmd + ' '.join(cmd_kwargs+cmd_optkwargs+cmd_optargs)
 
@@ -173,18 +185,19 @@ def check_inputs_add_units(args):
 		# Automatically go looking for the template in the sources directory
 		from os import walk
 		from os.path import join as joinpath
+		from os.path import splitext
 		foundTemplate = False
 		for root, dirs, files in walk(sourcesdir):
 			if not foundTemplate:
 				for name in files:
-					if name == args.srctemp+".fits":
+					if splitext(name)[0] == args.srctemp:
 						dir_and_name = '/'.join(joinpath(root, name).split('/')[-2:])
 						#print("Found template: "+dir_and_name)
 						args.srctemp = joinpath(root, name)
 						foundTemplate = True
 						continue
 
-		if not foundTemplate: parser.error("Could not find source template: "+args.srctemp+'.fits')
+		if not foundTemplate: parser.error("Could not find source template: "+args.srctemp+'.*')
 
 	# Add/check temperature if using blackbody model
 	if model.lower()=='blackbody':
