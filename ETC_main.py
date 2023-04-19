@@ -204,6 +204,13 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False):
 
     # SNR is fixed; solve for EXPTIME; for each EXPTIME tried, optimize SLIT
     # elif args.ETCmode == 'SNR':
+
+    # Compute final resolution R = lambda/fwhm;  approximate fwhm at center of channel, lambda at center of wrange
+    # For FWHM, use kernel result or spectral bin width, whichever is larger
+    kernel, kernel_fwhm, kernel_dlambda = makeLSFkernel(slitw_result ,args.seeing[0] ,args.channel ,pivot=args.seeing[1])
+    kernel_fwhm=kernel_fwhm[0]
+    binres = (args.binspect*u.pix).to('nm',  equivalencies=dispersion_scale_nobin[args.channel])
+    Res = (args.wrange.mean()/max(binres, kernel_fwhm)).to(1)
         
     # RETURN FROM MAIN()
 
@@ -211,7 +218,8 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False):
         'exptime':t,
         'SNR':SNR_result*u.Unit(1),
         'slitwidth':slitw_result,
-        'slit efficiency': (efffunc(slitw_result.to('arcsec').value)+slit_efficiency_max)*u.Unit(1)
+        'slit efficiency': (efffunc(slitw_result.to('arcsec').value)+slit_efficiency_max)*u.Unit(1),
+        'resolution':Res
         }
 
     if not quiet:
