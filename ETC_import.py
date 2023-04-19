@@ -178,6 +178,8 @@ def makeLSFkernel(slit_w ,seeing ,ch ,kernel_upsample=5. ,kernel_range_factor=4.
     pivot: wavelength where seeing FWHM is defined (unitful)
 
     RETURNS: Kernel (array, unitless) with which to convolve the spectrum
+             fwhm (unitful scalar) -- width of LSF kernel ("dlambda" in denominator of R=lambda/dlambda)
+             dlambda (unitful scalar) -- kernel sampling step
     '''
     
     assert isinstance(slit_w,u.Quantity), "slit_w needs units"
@@ -217,7 +219,8 @@ def makeLSFkernel(slit_w ,seeing ,ch ,kernel_upsample=5. ,kernel_range_factor=4.
     kernel = convolve(kernel1, kernel2, mode='same', method='auto')
 
     # Width of final kernel 
-    fwhm=peak_widths(kernel, [int((kernel.shape[0]+1)/2)-1] )[0] * dlambda 
+    fwhm=peak_widths(kernel, [int((kernel.shape[0]+1)/2)-1] )[0] * dlambda
+    fwhm=fwhm[0]
     # R = (midlam/fwhm).to(1).value
 
     return kernel, fwhm, dlambda

@@ -208,7 +208,7 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False):
     # Compute final resolution R = lambda/fwhm;  approximate fwhm at center of channel, lambda at center of wrange
     # For FWHM, use kernel result or spectral bin width, whichever is larger
     kernel, kernel_fwhm, kernel_dlambda = makeLSFkernel(slitw_result ,args.seeing[0] ,args.channel ,pivot=args.seeing[1])
-    kernel_fwhm=kernel_fwhm[0]
+    # kernel_fwhm=kernel_fwhm[0]
     binres = (args.binspect*u.pix).to('nm',  equivalencies=dispersion_scale_nobin[args.channel])
     Res = (args.wrange.mean()/max(binres, kernel_fwhm)).to(1)
         
