@@ -19,7 +19,7 @@ from scipy import optimize
 
 ''' LOAD DATA that doesn't depend on user input '''
 
-# Load sky background; eventually will need to interpolate a larger table
+# Load sky default background; used if rubin_sim spectrum is not provided
 # background units dimensions are not same as other flux units
 # File units = u.photon/u.s/u.nm/u.arcsec**2/u.m**2 ~ phot/s/wavelength  VS  nm
 skySpec0 = SourceSpectrum.from_file(CSVdir+skybackground_file ,wave_unit='nm') #HARDCODED UNIT
@@ -44,7 +44,12 @@ throughput_slicerOptics = LoadCSVSpec(throughputFile_slicer)
 # tt.stop('Setup')
 
 ''' MAIN FUNCTION RETURNS DICT OF RESULTS '''
-def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False):
+def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False, skyspec=None):
+    '''
+    skyspec = 2xN array tabulating a sky background spectrum; units = (nm , ergs/s/cm^2/Å )
+              Generated in OTM using SkyModel.return_wave_spec() from rubin_sim package
+              This currently overrides args.skymag which is still required by argparse. 
+    '''
 
     from ETC.ETC_config import channels
 
@@ -68,9 +73,14 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False):
     # Load source spectrum model and normalize
     sourceSpectrum = makeSource(args)
 
+    if skyspec: 
+        skySpec = SourceSpectrum(Empirical1D, keep_neg=True, 
+                                  points=skyspec[0]*u.nm, lookup_table=skyspec[1][0]*uu.FLAM) # (nm , ergs/s/cm^2/Å )
+
+    else:
     # Normalize the sky; normalization is wrong but proportional to phot/s/wavelength, same as file
     # skySpec = skySpec0.normalize(args.skymag*uu.VEGAMAG ,band=skyFilter ,vegaspec=vegaspec ) 
-    skySpec = skySpec0*1.575e-17 * 10.**((21.4-args.skymag)/2.5) ### HARDCODE NORMALIZED TO VEGA mag 21.4 JOHNSON V
+        skySpec = skySpec0*1.575e-17 * 10.**((21.4-args.skymag)/2.5) ### HARDCODE NORMALIZED TO VEGA mag 21.4 JOHNSON V
     # new units = VEGAMAG/arcsec^2 since skymag is really mag/arcsec^2
 
     # Load "throughput" for atmosphere
@@ -236,16 +246,18 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False):
         return result
 
 
-def runETC(row ,check=False):
+def runETC(row ,check=False, skyspec=None):
     '''Convert an astropy table row into an ETC command and run the ETC to get an exposure time'''
     cmd = formETCcommand(row)
     args = parser.parse_args(cmd.split())  ### Change this parser.error ? Should be OK since we check ETC cols at the beginning
     check_inputs_add_units(args) # Check for valid inputs; append units
 
+    ### Add skyspec check?
+
     # If only checking input, we're done
     if check: return True
 
-    result = main(args ,quiet=True)  # Unitful (s)
+    result = main(args ,quiet=True, skyspec=skyspec)  # Unitful (s)
     t = result['exptime']
     assert isinstance(t,u.Quantity), "Got invalid result from ETC"
     return result
