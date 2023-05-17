@@ -3,10 +3,11 @@
 #
 # Notes on SNR estimation: https://www.stsci.edu/instruments/wfpc2/Wfpc2_hand/HTML/W2_61.html
 
-# TODOS: K-CORRECTION
-#        USER SED, HOST GALAXY (mag/area)
-#        MOON PHASE/POSITION, ZODIACAL LIGHT
-#        Unique FILENAMES for plots?
+# TODOS: 
+### LSF is incorrect for side slices
+### K-CORRECTION
+### USER SED, HOST GALAXY (mag/area)
+### Unique FILENAMES for plots?
 #
 # Clean up global-ish variables?
 # Should background variances be 2x to acount for sky subtraction?
@@ -252,7 +253,14 @@ def runETC(row ,check=False, skyspec=None):
     args = parser.parse_args(cmd.split())  ### Change this parser.error ? Should be OK since we check ETC cols at the beginning
     check_inputs_add_units(args) # Check for valid inputs; append units
 
-    ### Add skyspec check?
+    # skyspec should be a tuple of arrays:  (Nlambda, (Nspec, Nlambda)) where Nspec > 1 for multiple filters
+    if skyspec:
+        try:
+            assert len(skyspec) == 2
+            for ss in skyspec[1]:
+                assert len(skyspec[0]) == len(ss)
+        except:
+            raise Exception('skyspec must be a 2-item tuple; 0: wavelength samples, 1: N arrays of spectrum values ')
 
     # If only checking input, we're done
     if check: return True

@@ -5,7 +5,7 @@
 #import numpy as np
 from numpy import array, arange, pi, hstack, vstack
 from pickle import load as pload  # Only needed in point source case
-from synphot import SourceSpectrum, SpectralElement  ### SLOW IMPORT!
+from synphot import SourceSpectrum, SpectralElement  # SLOW IMPORT!
 from synphot.models import Empirical1D, Gaussian1D, Box1D, ConstFlux1D
 import astropy.units as u
 import synphot.units as uu  # used in main code, not this file
@@ -210,6 +210,7 @@ def makeLSFkernel(slit_w ,seeing ,ch ,kernel_upsample=5. ,kernel_range_factor=4.
 
     # Unitless arrays for use with convolve; BEWARE of boundary behavior
     # convolve(mode=same) matches size of 1st argument
+    ### Need to offset the tophat for side slices
     slitLSF = Gaussian1D(stddev=sigma_seeing_lam)*Box1D(width=slit_w_lam) # Multiply seeing profile with slit "tophat"
     instLSF = Gaussian1D(stddev=LSFsigma[ch])
     kernel1 = slitLSF(xk).value
@@ -225,7 +226,7 @@ def makeLSFkernel(slit_w ,seeing ,ch ,kernel_upsample=5. ,kernel_range_factor=4.
 
     return kernel, fwhm, dlambda
 
-def convolveLSF(spectrum, slit_w ,seeing ,ch ,kernel_upsample=10. ,kernel_range_factor=4. ,pivot=500*u.nm ,wrange_=None):  ### side slice LSF is sus
+def convolveLSF(spectrum, slit_w ,seeing ,ch ,kernel_upsample=10. ,kernel_range_factor=4. ,pivot=500*u.nm ,wrange_=None):
     '''Convolve spectrum at focal plane with LSF'''
     '''
     Approximates seeing for each channel as Gaussian with scale at channel center wavelength
