@@ -26,6 +26,9 @@ from scipy import optimize
 skySpec0 = SourceSpectrum.from_file(CSVdir+skybackground_file ,wave_unit='nm') #HARDCODED UNIT
 # assumes units = phot/s/cm^2/Angstrom 
 
+skySpec0 = skySpec0*1.575e-17 # * 10.**((21.4-args.skymag)/2.5) ### HARDCODE NORMALIZED TO VEGA mag 21.4 JOHNSON V
+skymag0 = 21.4
+
 # Don't need to match mag reference and filter to source; will use whatever data we have
 skyFilter = SpectralElement.from_filter('johnson_v')
 
@@ -74,6 +77,7 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False, skys
     # Load source spectrum model and normalize
     sourceSpectrum = makeSource(args)
 
+    # Use provided sky spectrum; if not provided use and normalize template
     if skyspec: 
         skySpec = SourceSpectrum(Empirical1D, keep_neg=True, 
                                   points=skyspec[0]*u.nm, lookup_table=skyspec[1][0]*uu.FLAM) # (nm , ergs/s/cm^2/Å )
@@ -81,7 +85,7 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False, skys
     else:
     # Normalize the sky; normalization is wrong but proportional to phot/s/wavelength, same as file
     # skySpec = skySpec0.normalize(args.skymag*uu.VEGAMAG ,band=skyFilter ,vegaspec=vegaspec ) 
-        skySpec = skySpec0*1.575e-17 * 10.**((21.4-args.skymag)/2.5) ### HARDCODE NORMALIZED TO VEGA mag 21.4 JOHNSON V
+        skySpec = skySpec0 * 10.**((skymag0-args.skymag)/2.5) ###
     # new units = VEGAMAG/arcsec^2 since skymag is really mag/arcsec^2
 
     # Load "throughput" for atmosphere
