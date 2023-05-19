@@ -106,8 +106,9 @@ def makeSource(args):
     # Load source spectrum model
     if args.model[0].lower() == 'constant':
         label = 'constant'
-        sourceSpectrum = SourceSpectrum(ConstFlux1D ,amplitude=args.mag*u.ABmag) # assume AB mag; units don't matter
-        needNorm = False  # If spectrum is FLAT and mag is AB, then we are now normalized by definition
+        sourceSpectrum = SourceSpectrum(ConstFlux1D ,amplitude=args.mag*u.ABmag) # start with AB mag
+        # If spectrum is FLAT and mag is AB, then we are now normalized by definition
+        if args.magsystem.upper() == 'AB': needNorm = False  
 
     elif args.model[0].lower() == 'template':
         label = args.srctemp.split('/')[-1]  #used for plot labels
