@@ -2,6 +2,7 @@ import argparse
 from sys import path
 from numpy.ma import is_masked
 from ETC.ETC_import import sourcesdir
+from ETC.ETC_config import slitmodes
 
 # Hack to avoid exiting the program when there's a parser error
 class ArgumentParserError(Exception): pass
@@ -88,9 +89,8 @@ parser.add_argument('-hires', action='store_true', help=help)
 obsparam = parser.add_argument_group('REQUIRED Observation conditions')
 
 help = 'Mode of setting the slit width (string) and value for that mode (float).  '
-help += 'Valid modes are SET (set the slit width in arcsec), PSF (percentage of enclosed PSF), and SNR (???).'
-obsparam.add_argument('-slit', '-slitwidth', required=True, nargs=2,  metavar=('MODE','VALUE'), help=help)
-slitmodes = ['SET','SNR','PSF']
+help += 'Valid modes are: %s' % str(slitmodes.keys())
+obsparam.add_argument('-slit', '-slitwidth', required=True, nargs='*',  metavar=('MODE','VALUE'), help=help)
 
 help = 'Seeing FWHM (arcsec) defined at zenith and at pivot wavelength (nm)'
 obsparam.add_argument('-seeing', type=posfloat, nargs=2, metavar=('SEEING','PIVOT'), required=True, help=help)
@@ -195,19 +195,28 @@ def check_inputs_add_units(args):
 	choices = ('lmc30dor', 'lmcavg', 'mwavg', 'mwdense', 'mwrv21', 'mwrv40', 'smcbar', 'xgalsb')
 	if args.extmodel not in choices: parser.error('-extmodel must be in '+str(choices))
 
-	# Valid slit mode
+	## Check for Valid slit mode ##
+	# Check mode string
 	args.slitmode = args.slit[0].upper() # move the code to new parameter
-	args.slit = posfloat(args.slit[1]) # this parameter now just a float
-	if args.slitmode not in slitmodes: parser.error('-slitwidth MODE must be in '+str(slitmodes))
-
+	if args.slitmode not in slitmodes.keys(): parser.error('-slitwidth MODE must be in '+str(slitmodes))
+	# Convert AUTO to SNR
+	if args.slitmode == 'AUTO':
+		args.slitmode = 'SNR'
+		args.slit = slitmodes['AUTO'][0]
+	# Check for extra parameter
+	elif len(args.slit)>1:
+		args.slit = posfloat(args.slit[1]) # this parameter now just a float
+	else:
+		parser.error('-slitwidth %s needs a parameter X in range %s' % (args.slitmode, str(slitmodes[args.slitmode])))
+	# Check parameter range
+	if (args.slit > max(slitmodes[args.slitmode])) or (args.slit < min(slitmodes[args.slitmode])):
+		parser.error('-slitwidth %s X requires X be in range %s' % (args.slitmode, str(slitmodes[args.slitmode])))
+	
 	# Append units to inputs where applicable
 	import astropy.units as u
 
 	if args.slitmode == 'SET':
 		args.slit = slitfloat(args.slit)*u.arcsec  ### checks for valid range -- should simplify
-	else:
-		args.slit = 9.87 * u.arcsec  ### PLACEHOLDER UNTIL OTHER MODES IMPLEMENTED
-		### CHECK PSF AND SNR RANGES
 
 	args.wrange *= u.nm
 	if args.ETCmode in ['EXPTIME','SET']:

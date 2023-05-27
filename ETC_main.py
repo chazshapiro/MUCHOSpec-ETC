@@ -4,7 +4,7 @@
 # Notes on SNR estimation: https://www.stsci.edu/instruments/wfpc2/Wfpc2_hand/HTML/W2_61.html
 
 # TODOS: 
-### LSF is incorrect for side slices
+### LSF is incorrect for side slices; R is different for center and sides!
 ### K-CORRECTION
 ### USER SED, HOST GALAXY (mag/area)
 ### Unique FILENAMES for plots?
@@ -67,9 +67,9 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False, skys
     binCenters = makeBinCenters(args.binspect ,chanlist=channels ,wrange=args.wrange_)
     args.binCenters_ = binCenters
 
-    # Print the bins where the target wavelengths live; won't exactly match input range
-    if not quiet:
-        print( args.wrange, "-->", binCenters[args.channel][[0,-1]].round(3) )
+    # # Print the bins where the target wavelengths live; won't exactly match input range
+    # if not quiet:
+    #     print( args.wrange, "-->", binCenters[args.channel][[0,-1]].round(3) )
 
     if args.noslicer or args.fastSNR:   slicer_paths = ['center']
     else:                               slicer_paths = ['center','side']
@@ -135,120 +135,166 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False, skys
 
         return signal, bgvar, sharpness
 
-    # Solve this function to find slitwidth that gives 97% efficiency (3% slit loss)
-    def efffunc(slitw_arcsec):
+    slit_bracket = tuple(slit_w_range.to('arcsec').value)
+    SNRfunc = res_R = res_slitloss = None
+
+    # Solve this function to find slitwidth that gives requested slit loss
+    def efffunc(slitw_arcsec, loss=1.):
         eff = slitEfficiency(slitw_arcsec*u.arcsec ,slit_h ,args.seeing[0] ,pivot=args.seeing[1] ,optics=throughput_slicerOptics)
         if args.noslicer: eff = eff['center']
         else:             eff = eff['total']
-        return eff(args.wrange).mean() - slit_efficiency_max
+        return eff(args.wrange).mean() - (1-loss)  # solver will set this line to 0
+
+    # Solve this function to find slitwidth that gives requested R
+    def Rfunc(slitw_arcsec, Rgoal=0, seeing=args.seeing[0], pivot=args.seeing[1]):
+        # Compute R = lambda/fwhm;  approximate fwhm at center of channel, lambda at center of wrange
+        # For FWHM, use kernel result or spectral bin width, whichever is larger
+        kernel, kernel_fwhm, kernel_dlambda = makeLSFkernel(slitw_arcsec*u.arcsec ,seeing ,args.channel ,pivot=pivot)
+        binres = (args.binspect*u.pix).to('nm',  equivalencies=dispersion_scale_nobin[args.channel])
+        Res = (args.wrange.mean()/max(binres, kernel_fwhm)).to(1).value
+        return Res - Rgoal  # solver will set this line to 0
+
+    if args.slitmode == 'LOSS':
+        res_slitloss = args.slit/100.
+        # solve for where slit efficiency = 100% - loss
+        ans = optimize.root_scalar(efffunc ,args=(res_slitloss,) ,bracket=slit_bracket ,x0=args.seeing[0].to('arcsec').value)
+        if not ans.converged: raise RuntimeError('Slit solution for slit loss did not converge')
+        args.slit = ans.root * u.arcsec
+
+    if args.slitmode == 'RES':
+        res_R = args.slit
+        Rbounds = [Rfunc(w) for w in slit_w_range.to('arcsec').value]
+        if res_R > max(Rbounds): raise RuntimeError('Cannot solve for slit width, R is too high')
+        ### R is lower limited by PSF for point sources, and we currently only support point sources
+        ### If very low R is requested, approximate extended source by setting seeing very high
+        _seeing = args.seeing[0] if res_R > min(Rbounds) else 100*u.arcsec
+        ans = optimize.root_scalar(Rfunc ,args=(res_R,_seeing) ,bracket=slit_bracket ,x0=args.seeing[0].to('arcsec').value)
+        if not ans.converged: raise RuntimeError('Slit solution for R did not converge')
+        args.slit = ans.root * u.arcsec
 
     '''  ALL EXPTIME DEPENDENCE BELOW THIS LINE '''
 
-    # Unpack SNR or EXPTIME and set the other to None
-    ETCmode = args.ETCmode
-    if ETCmode == 'SNR':       SNR_target, exptime = (args.ETCfixed, None)
-    elif ETCmode == 'EXPTIME': SNR_target, exptime = (None, args.ETCfixed)
-    else: raise Exception('Invalid ETC mode')
-
-    if args.slitmode=='SET': ETCmode += '..SLIT'  # makes this section more readable
-
     ''' Compute SNR or solve for EXPTIME or SLIT depending on what is fixed '''
 
-    SNRfunc = None
+    SOLVE_EXPTIME = (args.ETCmode == 'SNR')  # makes this section more readable
+    SOLVE_SLIT    = (args.slitmode == 'SNR')
+
+    # Unpack fixed values
+    if SOLVE_EXPTIME:  res_SNR     = args.ETCfixed
+    else:              res_exptime = args.ETCfixed
+    if not SOLVE_SLIT: res_slitw   = args.slit
 
     # EXPTIME and SLIT are fixed; just compute SNR
-    if ETCmode == 'EXPTIME..SLIT':
-        t = exptime
-        slitw_result = args.slit
-        SNR_result = computeSNR(t, args.slit, args, SSSfocalplane)
+    if (not SOLVE_EXPTIME) and (not SOLVE_SLIT):
+        res_SNR = computeSNR(res_exptime, res_slitw, args, SSSfocalplane)
 
     # SNR and SLIT are fixed; solve for EXPTIME
-    elif ETCmode == 'SNR..SLIT':
-
-        slitw_result = args.slit
-        SNR_result = SNR_target
+    elif SOLVE_EXPTIME and (not SOLVE_SLIT):
 
         # Find root in log-log space where SNR(t) is ~linear; doesn't save much time but more likely to converge
         def SNRfunc(t_sec):
-            return log( computeSNR(10**t_sec*u.s, args.slit, args, SSSfocalplane) / SNR_target)
-            # return computeSNR(t_sec*u.s, args.slit, args, SSSfocalplane) - SNR_target
+            return log( computeSNR(10**t_sec*u.s, res_slitw, args, SSSfocalplane) / res_SNR)
+            # return computeSNR(t_sec*u.s, res_slitw, args, SSSfocalplane) - res_SNR
 
         #ans = optimize.root_scalar(SNRfunc ,x0=1 ,x1=100)  # Very bright stars may not converge here; try log-log
         ans = optimize.root_scalar(SNRfunc ,x0=0 ,x1=3 ,xtol=.01)
 
         # Check for converged answer
-        if ans.converged:
-            # t = (ans.root).astype('float16')*u.s
-            t = (10.**(ans.root).astype('float16'))*u.s
-        else:
-            raise RuntimeError('ETC calculation did not converge')
+        if not ans.converged:  raise RuntimeError('ETC calculation did not converge')
+        # t = (ans.root).astype('float16')*u.s
+        res_exptime = (10.**(ans.root).astype('float16'))*u.s
 
-    # EXPTIME is fixed; find SLIT that maximizes SNR
-    elif ETCmode == 'EXPTIME':
 
-        t = exptime
+    # EXPTIME is fixed; find SLIT that is X% below maximum SNR
+    elif SOLVE_SLIT and (not SOLVE_EXPTIME):
 
-        # Find "max" slit width containing 97% PSF
-        # ans = optimize.root_scalar(efffunc ,bracket=tuple(slit_w_range.to('arcsec').value) ,x0=args.seeing[0].to('arcsec').value)
+        def SNRfunc(slitw_arcsec, SNRgoal=0):
+            ret = computeSNR(res_exptime, slitw_arcsec*u.arcsec, args, SSSfocalplane)
+            return -(ret-SNRgoal)
 
-        # Check for converged answer
-        # if ans.converged:
-        #     slitw_max_arcsec = ans.root # unitless, in arcsec
-        # else:
-        #     raise RuntimeError('Max slit efficiency calculation did not converge')
-
-        # Solve for 'best' slitwidth (maximize SNR)
-        def SNRfunc(slitw_arcsec):
-            # print(slitw_arcsec)
-            ret = computeSNR(t, slitw_arcsec*u.arcsec, args, SSSfocalplane)
-            return -ret
-
-        # When optimizing SNR, don't look beyond max slit width set by 97%
-        slitbound = slit_w_range.to('arcsec').value
-        # if slitw_max_arcsec < slitbound[1]: slitbound[1] = slitw_max_arcsec
-
-        ans = optimize.minimize_scalar(SNRfunc ,bounds=slitbound 
+        # First solve for 'best' slitwidth (maximize SNR)
+        ans = optimize.minimize_scalar(SNRfunc ,bounds=slit_bracket 
                                         ,method='bounded' ,options={'xatol':0.05}) # absolute tolerance in slitw
 
-        SNR_result = -ans.fun
-        slitw_result = ans.x*u.arcsec
-        slitw_max_arcsec = slitbound[-1]
+        res_SNR = -ans.fun  # above function can minimize not maximize so we returned -1*SNR
+        slit_bracket = (slit_bracket[0], ans.x)  # slit width at maximum SNR
+        print('max SNR = %f   slit w = %f arcsec' % (-ans.fun, ans.x))
 
-        if not quiet:
-            print('SLIT=%s  limit=%.2f  best=%.2f'%(slitw_result.round(2), slitw_max_arcsec, slitw_result.value))
+        # Find slit width where SNR = X% of max; args.slit is percent of max SNR
+        if args.slit < 100:
+            res_SNR *= args.slit/100.
+            ans = optimize.root_scalar(SNRfunc, args=(res_SNR,) ,bracket=slit_bracket ,x0=args.seeing[0].to('arcsec').value)
+            res_slitw = ans.root*u.arcsec
+        else:
+            res_slitw = ans.x*u.arcsec
+
+        # if not quiet:
+        # slitw_max_arcsec = slit_bracket[-1]
+        #     print('SLIT=%s  limit=%.2f  best=%.2f'%(slitw_result.round(2), slitw_max_arcsec, slitw_result.value))
 
     # SNR is fixed; solve for EXPTIME; for each EXPTIME tried, optimize SLIT
-    # elif args.ETCmode == 'SNR':
+    elif SOLVE_EXPTIME and SOLVE_SLIT:
 
-    # Compute final resolution R = lambda/fwhm;  approximate fwhm at center of channel, lambda at center of wrange
-    # For FWHM, use kernel result or spectral bin width, whichever is larger
-    kernel, kernel_fwhm, kernel_dlambda = makeLSFkernel(slitw_result ,args.seeing[0] ,args.channel ,pivot=args.seeing[1])
-    # kernel_fwhm=kernel_fwhm[0]
-    binres = (args.binspect*u.pix).to('nm',  equivalencies=dispersion_scale_nobin[args.channel])
-    Res = (args.wrange.mean()/max(binres, kernel_fwhm)).to(1)
-        
-    # RETURN FROM MAIN()
+        def SNRfunc(log_t_sec, slit_bracket=slit_bracket, SNRgoal=res_SNR):
+
+            t = (10**log_t_sec)*u.s
+
+            def SNRfunc_W(slitw_arcsec, SNRgoal=0):
+                ret = computeSNR(t, slitw_arcsec*u.arcsec, args, SSSfocalplane)
+                return -(ret-SNRgoal)
+
+            # First solve for 'best' slitwidth (maximize SNR)
+            ans = optimize.minimize_scalar(SNRfunc_W ,bounds=slit_bracket 
+                                            ,method='bounded' ,options={'xatol':0.05}) # absolute tolerance in slitw
+
+            _SNR = -ans.fun  # above function can minimize not maximize so we returned -1*SNR
+            slit_bracket = (slit_bracket[0], ans.x)  # slit width at maximum SNR
+            # print('max SNR = %f   slit w = %f arcsec' % (-ans.fun, ans.x))
+
+            # Find slit width where SNR = X% of max; args.slit is percent of max SNR
+            if args.slit < 100:
+                _SNR *= args.slit/100.
+                ans = optimize.root_scalar(SNRfunc_W, args=(_SNR,) ,bracket=slit_bracket ,x0=args.seeing[0].to('arcsec').value)
+                _slitw = ans.root*u.arcsec
+            else:
+                _slitw = ans.x*u.arcsec
+
+            dSNR = log( computeSNR(t, _slitw, args, SSSfocalplane) / SNRgoal)
+            # print(10**log_t_sec, _slitw, _SNR, dSNR)
+            # Use "global" args to store results
+            args._slitw = _slitw
+            args._SNR = _SNR
+            return dSNR
+
+        ans = optimize.root_scalar(SNRfunc ,x0=0 ,x1=3 ,xtol=.01)
+
+        if not ans.converged:  raise RuntimeError('ETC calculation did not converge')
+        res_exptime = (10.**(ans.root).astype('float16'))*u.s
+        res_slitw = args._slitw
+        res_SNR = args._SNR
+
+    # PACK UP AND RETURN FROM MAIN()
 
     result = {
-        'exptime':t,
-        'SNR':SNR_result*u.Unit(1),
-        'slitwidth':slitw_result,
-        'slit efficiency': (efffunc(slitw_result.to('arcsec').value)+slit_efficiency_max)*u.Unit(1),
-        'resolution':Res
-        }
+        'wrange' : binCenters[args.channel][[0,-1]].round(3), # Binned wavelength range won't exactly match input range
+        'exptime' : res_exptime,
+        'slitwidth' : res_slitw,
+        'SNR' : res_SNR,
+        'resolution' : res_R if res_R else Rfunc(res_slitw.to('arcsec').value),
+        'slitloss' : res_slitloss if res_slitloss else  1. - efffunc(res_slitw.to('arcsec').value)
+    }
+
+    for k in result: result[k] *= u.Unit(1)  # Convert all to Quantity
 
     if not quiet:
-        print(  '  '.join(['%s=%s' % (k,v.round(2)) for (k,v) in result.items()])  )
-
-    result['wrange'] = args.wrange
+        print(  '  '.join(['%s=%s' % (k.upper(),v.round(3)) for (k,v) in result.items()])  )
 
     if args.plotSNR:
         result['plotSNR'] = computeSNR(t, slitw_result ,args, SSSfocalplane, allChans=True)
 
-    if ETCextras: # return extra functions and data for plotting
-        return result, efffunc, SNRfunc
-    else:
-        return result
+    # return extra functions and data for plotting
+    if ETCextras: return result, efffunc, SNRfunc
+    else:         return result
 
 
 def runETC(row ,check=False, skyspec=None):
@@ -273,7 +319,6 @@ def runETC(row ,check=False, skyspec=None):
     t = result['exptime']
     assert isinstance(t,u.Quantity), "Got invalid result from ETC"
     return result
-
 
 
 

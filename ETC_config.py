@@ -5,9 +5,16 @@
 import astropy.units as u
 from astropy.table import QTable
 
-slit_w_range=[0.2,10.]*u.arcsec
-slit_h=60.*u.arcsec
-slit_efficiency_max = 0.97  # max fraction of PSF to enclose when optimizing for SNR
+slit_w_range=[0.1,10.]*u.arcsec
+slit_h=60.*u.arcsec  # slit height (long direction)
+
+# Limits on 2nd slit mode parameter
+slitmodes = {'SET':[.1,10.],
+            'LOSS':[.1,90.],
+            'RES':[252,8500],  ### Trial and error limits that mitigate solver errors
+            'SNR':[10,100],
+            'AUTO':[95]} # AUTO is a special case of SNR
+
 
 telescope_D = 508.*u.cm  #Diameter
 Obscuration = 0.3 # As a ratio of M1
