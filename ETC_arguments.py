@@ -198,7 +198,7 @@ def check_inputs_add_units(args):
 	## Check for Valid slit mode ##
 	# Check mode string
 	args.slitmode = args.slit[0].upper() # move the code to new parameter
-	if args.slitmode not in slitmodes.keys(): parser.error('-slitwidth MODE must be in '+str(slitmodes))
+	if args.slitmode not in slitmodes.keys(): parser.error('-slitwidth MODE must be in '+str(list(slitmodes.keys())))
 	# Convert AUTO to SNR
 	if args.slitmode == 'AUTO':
 		args.slitmode = 'SNR'
