@@ -5,8 +5,11 @@ def plotSNR_vs_slit(args, plt):
     w_arcsec = arange(.2,4.5,.2)
 
     ### HARDCODED UNITS
-    fwhm = [makeLSFkernel(wi ,args.seeing[0] ,args.channel ,pivot=args.seeing[1], kernel_upsample=10.)[1] for wi in w_arcsec*u.arcsec]
-    fwhm = array(fwhm)*fwhm[0].unit
+    fwhm_dlam = [makeLSFkernel_slicer(wi ,args.seeing[0] ,args.channel ,pivot=args.seeing[1], kernel_upsample=10.)[1:] for wi in w_arcsec*u.arcsec]
+
+    fwhm =  array([x[0] for x in fwhm_dlam]).T*fwhm_dlam[0][0].unit  # 2 x Nwi
+    dlambda =  array([x[1].value for x in fwhm_dlam]).T * fwhm_dlam[1][0].unit  # 2 x Nwi
+
     R = array(args.wrange).mean()*u.nm/fwhm
     R = R.to(1).value
 
@@ -18,7 +21,7 @@ def plotSNR_vs_slit(args, plt):
 
     for s, c, l in zip(slicer, colors, labels):
 
-        # Compute SNR for all slit widths; find max SNR and where slit encloses 97% of PSF
+        # Compute SNR for all slit widths; find max SNR
 
         args.noslicer = not s
         result, efffunc, SNRfunc = main(args ,quiet=True, ETCextras=True)  #SNRfunc will be SNR vs slit in arcsec
@@ -34,9 +37,6 @@ def plotSNR_vs_slit(args, plt):
 
         #Plot SNR for each case with vertical markers
         ax1.plot(w_arcsec, snrs,color=c ,label=l)
-        #if s: ll = '97%'
-        #else: ll = None
-        #ax1.axvline(w97 ,color=c ,ls=':' ,label=ll)
         if s: ll = 'max SNR'
         else: ll = None
         ax1.axvline(w_arcsec[snrs.argmax()] ,color=c ,ls='--',label=ll)
@@ -44,17 +44,18 @@ def plotSNR_vs_slit(args, plt):
     # Add labels for SNR plots
     ax1.set_xlabel('Slit width (arcsec)')
     ax1.set_ylabel('SNR')
-    # ax1.set_title(str(result['wrange'])+'   mag=%s'%args.mag+'   exptime='+str(result['exptime'].round(3)) +'   seeing='+seeing+'"' )
     ax1.set_title( '%s   mag=%s   exptime=%s   seeing=%s"' % (result['wrange'], args.mag, result['exptime'].round(3), args.seeing[0].round(2).value) )
     ax1.legend(loc='center right')
 
     # Add plot and 2nd y-axis
     ax2 = ax1.twinx()
-    ax2.plot(w_arcsec, R, label='R' ,color='green')
+    ax2.plot(w_arcsec, R[0], label='R (center)' ,color='green')
+    ax2.plot(w_arcsec, R[1], label='R (side)' ,color='green', ls='dashed')
     ax2.set_ylabel('R', color='green')
     ax2.tick_params(axis ='y', labelcolor = 'green') 
     ax2.tick_params(axis='y', direction='in', length=6, width=2, colors='g')#, grid_color='r', grid_alpha=0.5)
     ax2.grid(False)
+    ax2.legend(loc='lower right')
 
     plt.savefig('SNR_vs_slit.png')
     print('Wrote', 'SNR_vs_slit.png')

@@ -78,7 +78,7 @@ help = 'Plot SNR vs. wavelength for the solution'
 parser.add_argument('-plotSNR', action='store_true', help=help)
 
 help = 'Make diagnostic plots'
-parser.add_argument('-plotdiag', action='store_true', help=help)
+parser.add_argument('-plotslit', action='store_true', help=help)
 
 help = 'Print timing info'
 parser.add_argument('-timer', action='store_true', help=help)

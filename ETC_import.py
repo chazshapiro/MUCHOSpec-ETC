@@ -186,7 +186,7 @@ def makeLSFkernel(slit_w ,seeing ,ch ,kernel_upsample=5. ,kernel_range_factor=4.
     assert isinstance(slit_w,u.Quantity), "slit_w needs units"
     
     # Set seeing to that of center wavelength of channel
-    # TODO: let seeing vary across channel?
+    ### TODO: let seeing vary across channel?
     midlam = channelRange[ch].mean()
     sigma_seeing = seeingLambda(midlam ,seeing ,pivot=pivot)/2.35
 
@@ -224,6 +224,79 @@ def makeLSFkernel(slit_w ,seeing ,ch ,kernel_upsample=5. ,kernel_range_factor=4.
     fwhm=peak_widths(kernel, [int((kernel.shape[0]+1)/2)-1] )[0] * dlambda
     fwhm=fwhm[0]
     # R = (midlam/fwhm).to(1).value
+
+    return kernel, fwhm, dlambda
+
+def makeLSFkernel_slicer(slit_w ,seeing ,ch ,kernel_upsample=5. ,kernel_range_factor=4. ,pivot=500*u.nm):
+    '''Placeholder until we have LSF data'''
+    '''
+    Approximates seeing for each channel as Gaussian with scale at channel center wavelength
+    Final kernel is INSTRUMENT * (SLIT X SEEING)  (*=convolve)
+    TODO: vary LSF in dispersion and/or spatial directions
+    TODO: Different LSFs for center and side slices
+
+    slit_w: slit width (unitful; angular size on sky)
+    seeing: FWHM of seeing profile at pivot (unitful)
+    ch: channel name
+    kernel_upsample: factor by which to upsample kernel scale
+    kernel_range_factor: factor of LSF FWHM by which to extend range of kernel sampling
+    pivot: wavelength where seeing FWHM is defined (unitful)
+
+    RETURNS: Kernel (array, unitless) with which to convolve the spectrum
+             fwhm (unitful scalar) -- width of LSF kernel ("dlambda" in denominator of R=lambda/dlambda)
+             dlambda (unitful scalar) -- kernel sampling step
+    '''
+    
+    assert isinstance(slit_w,u.Quantity), "slit_w needs units"
+    
+    # Set seeing to that of center wavelength of channel
+    ### TODO: let seeing vary across channel?
+    midlam = channelRange[ch].mean()
+    sigma_seeing = seeingLambda(midlam ,seeing ,pivot=pivot)/2.35
+
+    # Convert seeing and slit scales to wavelength
+    # LSFsigma is already in wavelength units
+    sigma_seeing_lam = sigma_seeing.to('pix', equivalencies=plate_scale[ch]) \
+                                    .to(u.AA ,equivalencies=dispersion_scale_nobin[ch])
+    slit_w_lam = slit_w.to('pix', equivalencies=plate_scale[ch]) \
+                                    .to(u.AA ,equivalencies=dispersion_scale_nobin[ch])
+
+    # Sample kernel out to slit width plus extra for instrument PSF
+    # Not ideal if slit width >> seeing but should work
+    kernel_range = slit_w_lam/2 + LSFsigma[ch]*kernel_range_factor
+
+    # MIN of seeing and slit sets the slit scale; MAX of slit and instument sets total scale
+    dlambda = max(min(sigma_seeing_lam, slit_w_lam/2.) ,LSFsigma[ch])/kernel_upsample
+
+    # Make wavelength array for sampling kernel
+    ## KERNEL RANGE MUST HAVE 0 IN THE EXACT CENTER (need odd array length)
+    xk = rangeQ(0.*dlambda,kernel_range+dlambda,dlambda)
+    xk = hstack((-xk[::-1],xk[1:]))  # Symmetrizes range, e.g. [-2,-1,0,1,2]
+
+    # Unitless arrays for use with convolve; BEWARE of boundary behavior
+    # convolve(mode=same) matches size of 1st argument
+
+    kernel = []
+    fwhm = []
+
+    for w_offset in [0., slit_w_lam]: # slit offset=0, slice offset = slid width
+
+        slitLSF = Gaussian1D(mean=w_offset, stddev=sigma_seeing_lam)*Box1D(width=slit_w_lam) # Multiply seeing profile with slit "tophat"
+        instLSF = Gaussian1D(stddev=LSFsigma[ch])
+        kernel1 = slitLSF(xk).value
+        kernel2 = instLSF(xk).value
+
+        # Total kernel
+        _kernel = convolve(kernel1, kernel2, mode='same', method='auto')
+        kernel.append(_kernel)
+
+        # Width of final kernel 
+        _fwhm=peak_widths(_kernel, [_kernel.argmax()] )[0] * dlambda
+        fwhm.append( _fwhm[0] )
+
+        # if w_offset!=0: breakpoint()
+
+    fwhm = [x.value for x in fwhm]*fwhm[0].unit
 
     return kernel, fwhm, dlambda
 

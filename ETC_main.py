@@ -48,7 +48,7 @@ throughput_slicerOptics = LoadCSVSpec(throughputFile_slicer)
 # tt.stop('Setup')
 
 ''' MAIN FUNCTION RETURNS DICT OF RESULTS '''
-def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False, skyspec=None):
+def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotslit=False, skyspec=None):
     '''
     skyspec = 2xN array tabulating a sky background spectrum; units = (nm , ergs/s/cm^2/Å )
               Generated in OTM using SkyModel.return_wave_spec() from rubin_sim package
@@ -58,7 +58,7 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotdiag=False, skys
     from ETC.ETC_config import channels
 
     # Only bother with channels being used for SNR to save time
-    if plotSNR or plotdiag:
+    if plotSNR or plotslit:
         args.wrange_ = None
     else:
         channels = [args.channel]
@@ -342,7 +342,7 @@ if __name__ == "__main__":
     if args.timer: tt.stop()
 
     # Plot SNR vs. wavelength if requested
-    if args.plotSNR or args.plotdiag:
+    if args.plotSNR or args.plotslit:
         print('Plotting...')
 
         from ETC.ETC_plots import *
@@ -373,6 +373,10 @@ if __name__ == "__main__":
         plt.savefig('plotSNR.png')
         print('Wrote', 'plotSNR.png')
 
-    if args.plotdiag:
+    if args.plotslit:
         # Plot SNR and resolution (R) vs. slit width for this target
-        plotSNR_vs_slit_mags(args, plt)
+        args.ETCmode = 'EXPTIME'
+        args.ETCfixed = result['exptime']
+        args.slitmode = 'SNR'
+        args.slit = 90  # dummy value
+        plotSNR_vs_slit(args, plt)
