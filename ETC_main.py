@@ -4,13 +4,10 @@
 # Notes on SNR estimation: https://www.stsci.edu/instruments/wfpc2/Wfpc2_hand/HTML/W2_61.html
 
 # TODOS: 
-### LSF is incorrect for side slices; R is different for center and sides!
+### HOST GALAXY (mag/area)
+### USER SED
 ### K-CORRECTION
-### USER SED, HOST GALAXY (mag/area)
-### Unique FILENAMES for plots?
-#
 # Clean up global-ish variables?
-# Should background variances be 2x to acount for sky subtraction?
 
 from ETC.ETC_config import *
 from ETC.ETC_arguments import *

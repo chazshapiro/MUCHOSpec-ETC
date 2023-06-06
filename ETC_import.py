@@ -547,7 +547,7 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
 
             else:
                 # extended source is normalized to mag/arcsec^2, so multiplying by arcsec^2/px gives signal in 1 pixel
-                spec = source_at_slit[k] * bg_pix_area * Npix_spatial  # signal per pixel * N_pixels
+                spec = source_at_slit[k] * bg_pix_area * Npix_spatial * args.binspat  # signal per pixel * N_pixels
                 if s == 'side': spec *= throughput_slicerOptics
 
             if args.hires: spec = convolveLSF(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1] ,wrange_=args.wrange_)
