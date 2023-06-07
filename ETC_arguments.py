@@ -229,6 +229,8 @@ def check_inputs_add_units(args):
 	# Modulate seeing at zenith to seeing at airmass >1
 	args.seeing[0] *= args.airmass**0.6
 
+	if args.extended: args.seeing[0] = 100.*u.arcsec  # override observed source "size" with something very big
+
 	# Check wavelength range is (min, max) and within specified channel
 	from ETC.ETC_config import channelRange
 	if args.wrange[0] >= args.wrange[1]: parser.error("Wavelength range must be in form [min, max]")

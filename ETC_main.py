@@ -164,7 +164,8 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotslit=False, skys
         if res_R > max(Rbounds): raise RuntimeError('Cannot solve for slit width, R is too high')
         ### R is lower limited by PSF for point sources, and we currently only support point sources
         ### If very low R is requested, approximate extended source by setting seeing very high
-        _seeing = args.seeing[0] if res_R > min(Rbounds) else 100*u.arcsec
+        EXTENDED_SOURCE = (res_R < min(Rbounds)) or args.extended
+        _seeing = 100*u.arcsec if EXTENDED_SOURCE else args.seeing[0]
         ans = optimize.root_scalar(Rfunc ,args=(res_R,_seeing) ,bracket=slit_bracket ,x0=args.seeing[0].to('arcsec').value)
         if not ans.converged: raise RuntimeError('Slit solution for R did not converge')
         args.slit = ans.root * u.arcsec
