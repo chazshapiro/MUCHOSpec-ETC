@@ -221,7 +221,7 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotslit=False, skys
         # Find slit width where SNR = X% of max; args.slit is percent of max SNR
         if args.slit < 100:
             res_SNR *= args.slit/100.
-            ans = optimize.root_scalar(SNRfunc, args=(res_SNR,) ,bracket=slit_bracket ,x0=args.seeing[0].to('arcsec').value)
+            ans = optimize.root_scalar(SNRfunc, args=(res_SNR,) ,bracket=slit_bracket ,x0=args.seeing[0].to('arcsec').value, rtol=0.01)
             res_slitw = ans.root*u.arcsec
         else:
             res_slitw = ans.x*u.arcsec
@@ -237,34 +237,45 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotslit=False, skys
 
             t = (10**log_t_sec)*u.s
 
-            def SNRfunc_W(slitw_arcsec, SNRgoal=0):
-                ret = computeSNR(t, slitw_arcsec*u.arcsec, args, SSSfocalplane)
-                return -(ret-SNRgoal)
+            if args._slitGoodEnough:
 
-            # First solve for 'best' slitwidth (maximize SNR)
-            ans = optimize.minimize_scalar(SNRfunc_W ,bounds=slit_bracket 
-                                            ,method='bounded' ,options={'xatol':0.05}) # absolute tolerance in slitw
+                _slitw = args._slitw
 
-            _SNR = -ans.fun  # above function can minimize not maximize so we returned -1*SNR
-            slit_bracket = (slit_bracket[0], ans.x)  # slit width at maximum SNR
-            # print('max SNR = %f   slit w = %f arcsec' % (-ans.fun, ans.x))
+            else: 
 
-            # Find slit width where SNR = X% of max; args.slit is percent of max SNR
-            if args.slit < 100:
-                _SNR *= args.slit/100.
-                ans = optimize.root_scalar(SNRfunc_W, args=(_SNR,) ,bracket=slit_bracket ,x0=args.seeing[0].to('arcsec').value)
-                _slitw = ans.root*u.arcsec
-            else:
-                _slitw = ans.x*u.arcsec
+                def SNRfunc_W(slitw_arcsec, SNRgoal=0):
+                    ret = computeSNR(t, slitw_arcsec*u.arcsec, args, SSSfocalplane)
+                    return -(ret-SNRgoal)
+
+                # First solve for 'best' slitwidth (maximize SNR)
+                ans = optimize.minimize_scalar(SNRfunc_W ,bounds=slit_bracket 
+                                                ,method='bounded' ,options={'xatol':0.05}) # absolute tolerance in slitw
+
+                _SNR = -ans.fun  # above function can minimize not maximize so we returned -1*SNR
+                slit_bracket = (slit_bracket[0], ans.x)  # slit width at maximum SNR
+                # print('max SNR = %f   slit w = %f arcsec' % (-ans.fun, ans.x))
+
+                # Find slit width where SNR = X% of max; args.slit is percent of max SNR
+                if args.slit < 100:
+                    _SNR *= args.slit/100.
+                    ans = optimize.root_scalar(SNRfunc_W, args=(_SNR,) ,bracket=slit_bracket ,x0=args.seeing[0].to('arcsec').value, rtol=0.01)
+                    _slitw = ans.root*u.arcsec
+                else:
+                    _slitw = ans.x*u.arcsec
 
             dSNR = log( computeSNR(t, _slitw, args, SSSfocalplane) / SNRgoal)
             # print(10**log_t_sec, _slitw, _SNR, dSNR)
             # Use "global" args to store results
+            if (not args.hires_solve) and (abs(dSNR) <= .2):  # 10**0.2 = 1.58 i.e. SNR is now within factor of 2 of target
+                args._slitGoodEnough = True  # Once SNR is in the ballpark, stop varying the slit and just solve for EXPTIME
             args._slitw = _slitw
-            args._SNR = _SNR
+            args._SNR = SNRgoal * 10.**dSNR
             return dSNR
 
+        args._slitw = 0.
+        args._slitGoodEnough = False
         ans = optimize.root_scalar(SNRfunc ,x0=0 ,x1=3 ,xtol=.01)
+        # print(args._slitw)
 
         if not ans.converged:  raise RuntimeError('ETC calculation did not converge')
         res_exptime = (10.**(ans.root).astype('float16'))*u.s

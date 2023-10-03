@@ -83,8 +83,11 @@ parser.add_argument('-plotslit', action='store_true', help=help)
 help = 'Print timing info'
 parser.add_argument('-timer', action='store_true', help=help)
 
-help = 'Use hi-res calculations to improve SNR accuracy'
+help = 'Use hi-res spectra calculations to improve SNR accuracy'
 parser.add_argument('-hires', action='store_true', help=help)
+
+help = 'Increase accuracy when solving for slit width and exptime simultaneously. (slower)'
+parser.add_argument('-hires_solve', action='store_true', help=help)
 
 obsparam = parser.add_argument_group('REQUIRED Observation conditions')
 
