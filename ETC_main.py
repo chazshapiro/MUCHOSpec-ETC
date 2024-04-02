@@ -146,7 +146,9 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotslit=False, skys
     def Rfunc(slitw_arcsec, Rgoal=0, seeing=args.seeing[0], pivot=args.seeing[1]):
         # Compute R = lambda/fwhm;  approximate fwhm at center of channel, lambda at center of wrange
         # For FWHM, use kernel result or spectral bin width, whichever is larger
-        kernel, kernel_fwhm, kernel_dlambda = makeLSFkernel(slitw_arcsec*u.arcsec ,seeing ,args.channel ,pivot=pivot)
+        # kernel, kernel_fwhm, kernel_dlambda = makeLSFkernel(slitw_arcsec*u.arcsec ,seeing ,args.channel ,pivot=pivot)
+        LSF = makeLSFkernel_slicer(slitw_arcsec*u.arcsec ,seeing ,args.channel ,pivot=pivot, kernel_upsample=100., centeronly=True)  ### sensitive to kernel_upsample 
+        kernel_fwhm = LSF['center']['fwhm']
         binres = (args.binspect*u.pix).to('nm',  equivalencies=dispersion_scale_nobin[args.channel])
         Res = (args.wrange.mean()/max(binres, kernel_fwhm)).to(1).value
         return Res - Rgoal  # solver will set this line to 0
