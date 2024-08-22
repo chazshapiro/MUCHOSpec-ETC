@@ -133,7 +133,7 @@ def makeSource(args):
 
     if needNorm:
         # Load bandpass for normalization
-        if args.magfilter.lower() == 'user':
+        if args.magfilter.upper() in ['USER','MATCH']: # MATCH is preferred, keeping USER as legacy
             # Use the wavelength range from command line
             from synphot.models import Box1D
             norm_band = SpectralElement(Box1D, amplitude=1, x_0=args.wrange.mean(), 
@@ -306,6 +306,10 @@ def makeLSFkernel_slicer(slit_w ,seeing ,ch ,kernel_upsample=10. ,kernel_range_f
         }
 
     # fwhm = [x.value for x in fwhm]*fwhm[0].unit
+
+    if not centeronly:
+        LSF['side2'] = LSF['side']
+        LSF['side2']['kernel'] = LSF['side2']['kernel'][::-1]  ### Reverse direction for the opposite slice
 
     return LSF
 

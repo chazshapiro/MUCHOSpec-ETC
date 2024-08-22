@@ -14,7 +14,7 @@ def noQuitETCparser():
 help = 'Run the Exposure Time Calculator.  Outputs are SNR, EXPTIME, wavelength range, and optional plots. '
 help += 'The model assumes that signals from 3 image slicer paths are summed for the SNR calculation.'
 epilog = 'Example minimum argument set:\n'
-epilog += './ETC_main.py G 500 510 SNR 10 -slit SET .5 -seeing 1 500 -airmass 1 -skymag 21.4 -mag 18. -magsystem AB -magfilter user'
+epilog += './ETC_main.py G 500 510 SNR 10 -slit SET .5 -seeing 1 500 -airmass 1 -skymag 21.4 -mag 18. -magsystem AB -magfilter match'
 
 parser = argparse.ArgumentParser(  # Make printed help text wider
   formatter_class=lambda prog: argparse.HelpFormatter(prog,max_help_position=40) ,description=help ,epilog=epilog)
@@ -113,8 +113,8 @@ help = '''Reference system (AB or VEGA) for source magnitude'''
 choices=['AB','VEGA','Vega']
 sourceparam_req.add_argument('-magsystem', type=str, choices=choices, required=True, help=help)
 
-help = '''Johnson filter (UBVRIJK) to define source magnitude. Use FILTER="user" to normalize to the WRANGE input'''
-choices = [c for c in 'UBVRIJK'] + ['user','USER','User']
+help = '''Johnson filter (UBVRIJK) to define source magnitude. Use FILTER="match" to normalize to the WRANGE input'''
+choices = [c for c in 'UBVRIJK'] + ['user','USER','User'] + ['match','MATCH','Match']
 sourceparam_req.add_argument('-magfilter', type=str, choices=choices, required=True, help=help)
 
 sourceparam_add = parser.add_argument_group('Additional source parameters')
