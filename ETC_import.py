@@ -13,12 +13,12 @@ from functools import cache
 from copy import deepcopy
 from scipy.signal import convolve, peak_widths
 
-from ETC.ETC_config import *
+from ETC_config import *
 
 vegaspec = SourceSpectrum.from_vega()
 
 # Setup paths to data that comes with the ETC package
-import ETC.ETC_config as p
+import ETC_config as p
 from os import path
 ETCdir = path.dirname(p.__file__)
 sourcesdir = ETCdir+'/sources/'
