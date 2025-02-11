@@ -1,0 +1,5 @@
+astropy==5.2.1
+matplotlib==3.9.2
+numpy==1.10.1
+scipy==1.15.0
+synphot==1.1.1

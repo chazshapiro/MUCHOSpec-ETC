@@ -9,9 +9,9 @@
 ### K-CORRECTION
 # Clean up global-ish variables?
 
-from ETC.ETC_config import *
-from ETC.ETC_arguments import *
-from ETC.ETC_import import *
+from ETC_config import *
+from ETC_arguments import *
+from ETC_import import *
 from numpy import array, arange, vstack, log, where
 from scipy import optimize
 
@@ -52,7 +52,7 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotslit=False, skys
               This currently overrides args.skymag which is still required by argparse. 
     '''
 
-    from ETC.ETC_config import channels
+    from ETC_config import channels
 
     # Only bother with channels being used for SNR to save time
     if plotSNR or plotslit:
@@ -356,7 +356,7 @@ if __name__ == "__main__":
     if args.plotSNR or args.plotslit:
         print('Plotting...')
 
-        from ETC.ETC_plots import *
+        from ETC_plots import *
         import matplotlib.pyplot as plt
         #matplotlib.rcParams.update({'font.size': 14})
         from astropy.visualization import astropy_mpl_style, quantity_support
