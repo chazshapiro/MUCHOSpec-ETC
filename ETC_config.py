@@ -45,6 +45,7 @@ chanConfig['channelRange']=[[310.,436.], [417.,590.], [561.,794.], [756.,1040.]]
 
 # Width of detector (px) in the dispersion direction
 chanConfig['Npix_dispers']=(4096, 4096, 4096, 4096)
+chanConfig['dLambda'] = [ (cr[1]-cr[0])/npd for (cr,npd) in zip(chanConfig['channelRange'], chanConfig['Npix_dispers']) ]
 
 chanConfig['platescale']=(0.191, 0.191, 0.191, 0.191)*u.arcsec/u.pix
 
@@ -54,8 +55,9 @@ chanConfig['readnoise']=(4.0, 4.0, 4.0, 4.0)*u.count/u.pix
 
 #LSFFile={}  # Wait for data
 
-#1/2 of FWHM requirement --> sigma
-chanConfig['LSFsigma']=(1.0, 1.4, 1.85, 2.25)*u.AA /2/2.35
+#FWHM ~ sigma*2.35
+chanConfig['LSFsigma_px']=[2.585, 2.585, 2.585, 2.585]  # R, I widths measured by Matt Matuszewski, 2025
+chanConfig['LSFsigma'] = chanConfig['LSFsigma_px'] * chanConfig['dLambda']
 
 # Colors for plotting
 chanConfig['channelColor']=('blue','green','red','magenta')
