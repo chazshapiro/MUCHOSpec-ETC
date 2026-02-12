@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "muchospec-etc"
+version = "0.1.0"
+description = "MUCHOSpec Exposure Time Calculator"
+authors = [{name="Charles Shapiro"}]
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "scipy",
+    "astropy",
+    "synphot"
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+#[tool.setuptools.package-data]
+#muchospec_etc = ["data/**/*"]

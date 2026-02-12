@@ -9,9 +9,9 @@
 ### K-CORRECTION
 # Clean up global-ish variables?
 
-from ETC.ETC_config import *
-from ETC.ETC_arguments import *
-from ETC.ETC_import import *
+from .config import *
+from .arguments import *
+from .imports import *
 from numpy import array, arange, vstack, log, where
 from scipy import optimize
 
@@ -356,7 +356,7 @@ if __name__ == "__main__":
     if args.plotSNR or args.plotslit:
         print('Plotting...')
 
-        from ETC.ETC_plots import *
+        from .plots import *
         import matplotlib.pyplot as plt
         #matplotlib.rcParams.update({'font.size': 14})
         from astropy.visualization import astropy_mpl_style, quantity_support
