@@ -1,7 +1,5 @@
 import argparse
 from numpy.ma import is_masked
-
-from .imports import sourcesdir
 from .config import slitmodes, channels
 
 

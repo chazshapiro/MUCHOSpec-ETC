@@ -12,6 +12,7 @@
 from .config import *
 from .arguments import *
 from .imports import *
+from .imports import csv_path
 from numpy import array, arange, vstack, log, where
 from scipy import optimize
 
@@ -20,7 +21,7 @@ from scipy import optimize
 # Load sky default background; used if rubin_sim spectrum is not provided
 # background units dimensions are not same as other flux units
 # File units = u.photon/u.s/u.nm/u.arcsec**2/u.m**2 ~ phot/s/wavelength  VS  nm
-skySpec0 = SourceSpectrum.from_file(CSVdir+skybackground_file ,wave_unit='nm') #HARDCODED UNIT
+skySpec0 = SourceSpectrum.from_file(str(csv_path(skybackground_file)), wave_unit="nm") #HARDCODED UNIT
 # assumes units = phot/s/cm^2/Angstrom 
 
 skySpec0 = skySpec0*1.575e-17 # * 10.**((21.4-args.skymag)/2.5) ### HARDCODE NORMALIZED TO VEGA mag 21.4 JOHNSON V
