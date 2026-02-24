@@ -9,9 +9,10 @@
 ### K-CORRECTION
 # Clean up global-ish variables?
 
-from ETC.ETC_config import *
-from ETC.ETC_arguments import *
-from ETC.ETC_import import *
+from .config import *
+from .arguments import *
+from .imports import *
+from .imports import csv_path
 from numpy import array, arange, vstack, log, where
 from scipy import optimize
 
@@ -20,7 +21,7 @@ from scipy import optimize
 # Load sky default background; used if rubin_sim spectrum is not provided
 # background units dimensions are not same as other flux units
 # File units = u.photon/u.s/u.nm/u.arcsec**2/u.m**2 ~ phot/s/wavelength  VS  nm
-skySpec0 = SourceSpectrum.from_file(CSVdir+skybackground_file ,wave_unit='nm') #HARDCODED UNIT
+skySpec0 = SourceSpectrum.from_file(str(csv_path(skybackground_file)), wave_unit="nm") #HARDCODED UNIT
 # assumes units = phot/s/cm^2/Angstrom 
 
 skySpec0 = skySpec0*1.575e-17 # * 10.**((21.4-args.skymag)/2.5) ### HARDCODE NORMALIZED TO VEGA mag 21.4 JOHNSON V
@@ -51,7 +52,7 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotslit=False, skys
               This currently overrides args.skymag which is still required by argparse. 
     '''
 
-    from ETC.ETC_config import channels
+    from .config import channels
 
     # Only bother with channels being used for SNR to save time
     if plotSNR or plotslit:
@@ -356,7 +357,7 @@ if __name__ == "__main__":
     if args.plotSNR or args.plotslit:
         print('Plotting...')
 
-        from ETC.ETC_plots import *
+        from .plots import *
         import matplotlib.pyplot as plt
         #matplotlib.rcParams.update({'font.size': 14})
         from astropy.visualization import astropy_mpl_style, quantity_support

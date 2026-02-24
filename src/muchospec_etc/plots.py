@@ -1,4 +1,4 @@
-from ETC.ETC_main import *
+from main import *
 
 def plotSNR_vs_slit(args, plt):
 

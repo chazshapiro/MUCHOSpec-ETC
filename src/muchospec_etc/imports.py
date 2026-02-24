@@ -3,29 +3,47 @@
 #TODO: rewite LSF convolution using astropy.convolution?
 
 #import numpy as np
+from __future__ import annotations
 from numpy import array, arange, pi, hstack, vstack
 from pickle import load as pload  # Only needed in point source case
 from synphot import SourceSpectrum, SpectralElement  # SLOW IMPORT!
 from synphot.models import Empirical1D, Gaussian1D, Box1D, ConstFlux1D
 import astropy.units as u
 import synphot.units as uu  # used in main code, not this file
-from functools import cache
+from functools import cache, lru_cache
 from copy import deepcopy
 from scipy.signal import convolve, peak_widths
+from importlib.resources import files
+from pathlib import Path
+from importlib.resources import files
+import pickle
 
-from ETC.ETC_config import *
+from .config import *
 
-vegaspec = SourceSpectrum.from_vega()
+@lru_cache(maxsize=1)
+def get_vega_spectrum():
+    """Lazily load Vega spectrum (may download on first call)."""
+    return SourceSpectrum.from_vega()
 
-# Setup paths to data that comes with the ETC package
-import ETC.ETC_config as p
-from os import path
-ETCdir = path.dirname(p.__file__)
-sourcesdir = ETCdir+'/sources/'
-if CSVdir is None: CSVdir = ETCdir+'/CSV/'
-PSFsum2DFile = ETCdir+'/PSFsum2D.pkl' #pre-tabulated integral of PSF over slit and side slices
+@lru_cache(maxsize=1)
+def get_bandpass_atm():
+    return LoadCSVSpec("atm-extinction-Palomar.csv")
+
+@lru_cache(maxsize=1)
+def get_PSFsum2D():
+    pkl_path = files("muchospec_etc").joinpath("data", "PSFsum2D.pkl")
+
+    with open(pkl_path, "rb") as f:
+        return pickle.load(f)
+    
+def get_sources_dir():
+    return files("muchospec_etc").joinpath("data", "sources")
+
+def csv_path(filename: str):
+    return files("muchospec_etc").joinpath("data", "csv", filename)
 
 # Check config file inputs are valid and make some derived parameters
+PSFsum2D = get_PSFsum2D()
 
 # Unit equivalence
 plate_scale = { k : u.pixel_scale(platescale[k]) for k in channels }
@@ -86,10 +104,17 @@ def rangeQ(q0, q1, dq=None):
         
     return arange(v0,v1,dv)*unit
 
+def LoadCSVSpec(filename, default_waveunit=None):
 
-def LoadCSVSpec(filename ,CSVdir=CSVdir):
-    '''Helper to load throughput/spectrum element from CSV file'''
-    return SpectralElement.from_file(CSVdir+filename ,wave_unit=default_waveunit)
+    if default_waveunit is None:
+        default_waveunit = u.nm
+
+    csv_path = files("muchospec_etc").joinpath("data", "csv", filename)
+
+    return SpectralElement.from_file(
+        str(csv_path),
+        wave_unit=default_waveunit
+    )
 
 def seeingLambda(w ,FWHM ,pivot=500.*u.nm):
     '''Seeing law scaled to wavelength'''
@@ -147,6 +172,7 @@ def makeSource(args):
             sourceSpectrum = sourceSpectrum.normalize(args.mag*u.ABmag ,band=norm_band )
                                                       #,wavelengths=sourceSpectrum.waveset)
         elif args.magsystem.upper() == 'VEGA':
+            vegaspec = get_vega_spectrum()
             sourceSpectrum = sourceSpectrum.normalize(args.mag*uu.VEGAMAG ,band=norm_band 
                                                       ,vegaspec=vegaspec)
 
@@ -156,7 +182,7 @@ def make_empirical(spec, lams):
     '''convert spectrum model to lookup table'''
     return SourceSpectrum(Empirical1D, points=lams, lookup_table=spec(lams), keep_neg=True)
 
-bandpass_atm = LoadCSVSpec(throughputFile_atm)
+bandpass_atm = get_bandpass_atm()
 def Extinction_atm(airmass):
     '''Compute Transmission vs. wavelength modulated by airmass.  Returns bandpass object'''
     bandpass = deepcopy(bandpass_atm)
@@ -400,8 +426,6 @@ def Moffat_scalefree(x,y ,beta=moffat_beta):
     '''Moffat PSF profile; x and y are dimensionless; not normalized here - we do that after tabulating'''
     return (1.+x**2+y**2)**(-beta)
 
-# TABULATED IN PSF-profile-scratch.ipynb
-PSFsum2D = pload(open(PSFsum2DFile ,'rb'))
 from scipy.interpolate import dfitpack
 
 from scipy.special import gamma
