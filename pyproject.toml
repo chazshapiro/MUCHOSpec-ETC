@@ -12,7 +12,7 @@ requires-python = ">=3.9"
 
 dependencies = [
     "numpy>=1.23",
-    "scipy>=1.9",
+    "scipy==1.9.2",
     "astropy>=5.0",
     "synphot>=1.6",
 ]

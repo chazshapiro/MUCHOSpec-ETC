@@ -52,7 +52,7 @@ def main(args ,quiet=False ,ETCextras=False ,plotSNR=False ,plotslit=False, skys
               This currently overrides args.skymag which is still required by argparse. 
     '''
 
-    from ETC.ETC_config import channels
+    from .config import channels
 
     # Only bother with channels being used for SNR to save time
     if plotSNR or plotslit:
