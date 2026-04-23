@@ -48,7 +48,7 @@ chanConfig['channelRange']=[[3051.,4435.], [4157.,5931.], [5619.,7934.], [7512.,
 chanConfig['Npix_dispers']=(4114, 4114, 4114, 4114)
 chanConfig['dLambda'] = [ (cr[1]-cr[0])/npd for (cr,npd) in zip(chanConfig['channelRange'], chanConfig['Npix_dispers']) ]
 
-chanConfig['platescale']=(0.191, 0.191, 0.191, 0.191)*u.arcsec/u.pix
+chanConfig['platescale']=(0.185, 0.185, 0.185, 0.185)*u.arcsec/u.pix
 
 chanConfig['darkcurrent']=(2.0, 2.0, 2.0, 2.0)*u.count/u.pix/u.hr
 
