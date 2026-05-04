@@ -52,7 +52,7 @@ chanConfig['platescale']=(0.185, 0.185, 0.185, 0.185)*u.arcsec/u.pix
 
 chanConfig['darkcurrent']=(2.0, 2.0, 2.0, 2.0)*u.count/u.pix/u.hr
 
-chanConfig['readnoise']=(4.0, 4.0, 4.0, 4.0)*u.count/u.pix
+chanConfig['readnoise']=(3.1, 19., 3.5, 4.7)*u.count/u.pix # rms e-
 
 #LSFFile={}  # Wait for data
 
