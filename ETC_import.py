@@ -95,7 +95,7 @@ def seeingLambda(w ,FWHM ,pivot=500.*u.nm):
     '''Seeing law scaled to wavelength'''
     assert u.get_physical_type(w) == 'length', "w must have units of length"
     #pivot = 500.*u.nm
-    return (FWHM*(w/pivot)**0.2).to('arcsec')  # Force units to simplify
+    return (FWHM*(pivot/w)**0.2).to('arcsec')  # Force units to simplify
 
 def makeSource(args):
     ''' Load the source model, mix with astrophysics, normalize.
