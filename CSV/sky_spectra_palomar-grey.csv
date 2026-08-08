@@ -1,5 +1,5 @@
-# Palomar sky spectrum for "grey" conditions
-# Measured by Christoffer Fremling, 2026-07
+# Palomar sky spectrum for "grey" conditions - see sky_spectra_palomar.csv
+# Measured by Christoffer Fremling, 2026-02-23
 # Compiled by Chaz Shapiro, 2026-08-07
 
 wavelength_A,flam_erg_s_cm2_A_arcsec2
