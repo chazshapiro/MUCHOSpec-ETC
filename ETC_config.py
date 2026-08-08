@@ -28,7 +28,7 @@ moffat_theta_factor = 0.5/(2**(1./moffat_beta) - 1.)**.5  # theta = factor*seein
 CSVdir=None #'/home/developer/Software/ETC/CSV/'
 default_waveunit=u.nm  #assume units for all CSV files
 
-skybackground_file = 'Gemini_skybg_50_10.txt'  #placeholder sky model
+skybackground_file = 'sky_spectra_palomar-grey.csv'  # Measured 2026-07;  flux units are /Angstrom
 
 throughputFile_atm = 'atm-extinction-Palomar.csv'  #dimensionless T  (Flux/Flux_above_atmosphere)
 throughputFile_telescope = 'throughput-Palomar-200inch.csv'
