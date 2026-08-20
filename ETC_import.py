@@ -13,12 +13,12 @@ from functools import cache
 from copy import deepcopy
 from scipy.signal import convolve, peak_widths
 
-from ETC.ETC_config import *
+from .ETC_config import *
 
 vegaspec = SourceSpectrum.from_vega()
 
 # Setup paths to data that comes with the ETC package
-import ETC.ETC_config as p
+import .ETC_config as p
 from os import path
 ETCdir = path.dirname(p.__file__)
 sourcesdir = ETCdir+'/sources/'
@@ -39,7 +39,7 @@ for k in channels:
 totalRange = u.Quantity([v for v in channelRange.values()])
 totalRange = u.Quantity([totalRange.min(),totalRange.max()])
 
-telescope_Area = (1. - Obscuration**2)*pi*(telescope_D/2.)**2 #Collecting area 
+telescope_Area = (1. - Obscuration**2)*pi*(telescope_D/2.)**2 #Collecting area
 
 
 # Function definitions
@@ -69,9 +69,9 @@ def makeBinCenters(binspec, chanlist=channels, wrange=None):
 
 def rangeQ(q0, q1, dq=None):
     '''Construct an evenly spaced array using unitful Quantities'''
-    
+
     assert isinstance(q0, u.Quantity) and isinstance(q1, u.Quantity), "Inputs must be Quantities"
-    
+
     unit = q0.unit
     if dq is None: dq = 1.*unit
     else: assert isinstance(dq, u.Quantity), "Inputs must be Quantities"
@@ -81,9 +81,9 @@ def rangeQ(q0, q1, dq=None):
         "All inputs must have same physical dimensions (different units are OK)"
 
     v0 = q0.value
-    v1 = q1.to_value(unit)    
+    v1 = q1.to_value(unit)
     dv = dq.to_value(unit)
-        
+
     return arange(v0,v1,dv)*unit
 
 
@@ -108,7 +108,7 @@ def makeSource(args):
         label = 'constant'
         sourceSpectrum = SourceSpectrum(ConstFlux1D ,amplitude=args.mag*u.ABmag) # start with AB mag
         # If spectrum is FLAT and mag is AB, then we are now normalized by definition
-        if args.magsystem.upper() == 'AB': needNorm = False  
+        if args.magsystem.upper() == 'AB': needNorm = False
 
     elif args.model[0].lower() == 'template':
         label = args.srctemp.split('/')[-1]  #used for plot labels
@@ -136,7 +136,7 @@ def makeSource(args):
         if args.magfilter.upper() in ['USER','MATCH']: # MATCH is preferred, keeping USER as legacy
             # Use the wavelength range from command line
             from synphot.models import Box1D
-            norm_band = SpectralElement(Box1D, amplitude=1, x_0=args.wrange.mean(), 
+            norm_band = SpectralElement(Box1D, amplitude=1, x_0=args.wrange.mean(),
                                         width=(args.wrange[1]-args.wrange[0]) )
         else:
             norm_band = SpectralElement.from_filter('johnson_'+args.magfilter.lower())
@@ -147,7 +147,7 @@ def makeSource(args):
             sourceSpectrum = sourceSpectrum.normalize(args.mag*u.ABmag ,band=norm_band )
                                                       #,wavelengths=sourceSpectrum.waveset)
         elif args.magsystem.upper() == 'VEGA':
-            sourceSpectrum = sourceSpectrum.normalize(args.mag*uu.VEGAMAG ,band=norm_band 
+            sourceSpectrum = sourceSpectrum.normalize(args.mag*uu.VEGAMAG ,band=norm_band
                                                       ,vegaspec=vegaspec)
 
     return sourceSpectrum
@@ -182,9 +182,9 @@ def makeLSFkernel(slit_w ,seeing ,ch ,kernel_upsample=10. ,kernel_range_factor=4
              fwhm (unitful scalar) -- width of LSF kernel ("dlambda" in denominator of R=lambda/dlambda)
              dlambda (unitful scalar) -- kernel sampling step
     '''
-    
+
     assert isinstance(slit_w,u.Quantity), "slit_w needs units"
-    
+
     # Set seeing to that of center wavelength of channel
     ### TODO: let seeing vary across channel?
     midlam = channelRange[ch].mean()
@@ -220,7 +220,7 @@ def makeLSFkernel(slit_w ,seeing ,ch ,kernel_upsample=10. ,kernel_range_factor=4
     # Total kernel
     kernel = convolve(kernel1, kernel2, mode='same', method='auto')
 
-    # Width of final kernel 
+    # Width of final kernel
     fwhm=peak_widths(kernel, [int((kernel.shape[0]+1)/2)-1] )[0] * dlambda
     fwhm=fwhm[0]
     # R = (midlam/fwhm).to(1).value
@@ -247,9 +247,9 @@ def makeLSFkernel_slicer(slit_w ,seeing ,ch ,kernel_upsample=10. ,kernel_range_f
              fwhm (unitful scalar) -- width of LSF kernel ("dlambda" in denominator of R=lambda/dlambda)
              dlambda (unitful scalar) -- kernel sampling step
     '''
-    
+
     assert isinstance(slit_w,u.Quantity), "slit_w needs units"
-    
+
     # Set seeing to that of center wavelength of channel
     ### TODO: let seeing vary across channel?
     midlam = channelRange[ch].mean()
@@ -294,7 +294,7 @@ def makeLSFkernel_slicer(slit_w ,seeing ,ch ,kernel_upsample=10. ,kernel_range_f
         _kernel = convolve(kernel1, kernel2, mode='same', method='auto')
         # kernel.append(_kernel)
 
-        # Width of final kernel 
+        # Width of final kernel
         _fwhm=peak_widths(_kernel, [_kernel.argmax()] )[0] * dlambda
         # fwhm.append( _fwhm[0] )
 
@@ -331,7 +331,7 @@ def convolveLSF_old(spectrum, slit_w ,seeing ,ch ,kernel_upsample=10. ,kernel_ra
 
     RETURNS: Spectrum object (Emprical1D) after LSF convolution
     '''
-    
+
     assert isinstance(slit_w,u.Quantity), "slit_w needs units"
     assert isinstance(spectrum ,(SourceSpectrum,SpectralElement)), \
         "Input spectrum must be SourceSpectrum or SpectralElement class"
@@ -353,7 +353,7 @@ def convolveLSF_old(spectrum, slit_w ,seeing ,ch ,kernel_upsample=10. ,kernel_ra
         newspec = SpectralElement(Empirical1D, points=x, lookup_table=spec2, keep_neg=True)
     else:
         raise Exception("Unsupported input spectrum class")
-        
+
     return newspec
 
 def convolveLSF(LSF, spectrum ,ch ,kernel_range_factor=4. ,wrange_=None):
@@ -370,7 +370,7 @@ def convolveLSF(LSF, spectrum ,ch ,kernel_range_factor=4. ,wrange_=None):
 
     RETURNS: Spectrum object (Emprical1D) after LSF convolution
     '''
-    
+
     assert isinstance(spectrum ,(SourceSpectrum,SpectralElement)), \
         "Input spectrum must be SourceSpectrum or SpectralElement class"
 
@@ -394,7 +394,7 @@ def convolveLSF(LSF, spectrum ,ch ,kernel_range_factor=4. ,wrange_=None):
         newspec = SpectralElement(Empirical1D, points=x, lookup_table=spec2, keep_neg=True)
     else:
         raise Exception("Unsupported input spectrum class")
-        
+
     return newspec
 def Moffat_scalefree(x,y ,beta=moffat_beta):
     '''Moffat PSF profile; x and y are dimensionless; not normalized here - we do that after tabulating'''
@@ -425,7 +425,7 @@ def evaluate2Dinterp(f, x, y):
 
 def slitFractions(lam, w ,h ,FWHM ,pivot=500.*u.nm):
     '''Compute fraction of PSF passing through slit and side slices. Assumes Moffat PSF'''
-    
+
     ts = moffat_theta_factor * seeingLambda(lam ,FWHM ,pivot=pivot)  #specific to Moffat PSF
     #if ts.isscalar: ts=[ts]
 
@@ -434,7 +434,7 @@ def slitFractions(lam, w ,h ,FWHM ,pivot=500.*u.nm):
 
     if hasattr(hts, '__iter__'):
         wts=array([wts]*len(hts))  # copy into a list if h is a list
-        
+
     centerFrac = evaluate2Dinterp(PSFsum2D, wts/2., hts/2.)
     totalFrac = evaluate2Dinterp(PSFsum2D, 3.*wts/2., hts/2.)
 
@@ -457,7 +457,7 @@ def slitEfficiency(w ,h ,FWHM ,pivot=500.*u.nm ,optics=None):
 
     ts = moffat_theta_factor * seeingLambda(lams ,FWHM ,pivot=pivot)  #specific to Moffat PSF
     #if ts.isscalar: ts=[ts]
-        
+
     centerFrac = evaluate2Dinterp(PSFsum2D, w/ts/2., h/ts/2.)
     totalFrac = evaluate2Dinterp(PSFsum2D, 3.*w/ts/2., h/ts/2.)
 
@@ -524,7 +524,7 @@ def profileOnDetector(channel ,slit_w ,seeing ,pivot ,lams ,spatial_range=None ,
 def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args ,chanlist ,kernel_range_factor=4.):
     '''Convert source and sky spectra at slit entrance to spectra at focal plane.
     Applies throughput of slit and slicer, convolves with LSF, computes sharpness parameters
-    1/sharpness is effective spatial extent of profile in (possibly binned) pixels 
+    1/sharpness is effective spatial extent of profile in (possibly binned) pixels
     Assumes seeing-limited PSF
 
     INPUTS
@@ -569,7 +569,7 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
 
     if args.fastSNR: Npix_spatial = 2*args.fastSNR  # overrides extended source size
 
-    sharpness = { k : { s: 
+    sharpness = { k : { s:
         1./array([Npix_spatial]*len(binCenters[k])) if Npix_spatial is not None # 1/sharpness = [N, N, N...]
         else 2*(profile_slit[k][s]**2).sum(0)
         for s in slicer_paths }  for k in chanlist }
@@ -590,7 +590,7 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
         sourceSpectrumFPA[k]={}
         skySpectrumFPA[k]={}
 
-        if args.hires: 
+        if args.hires:
             # Make the convolution kernel for each slice
             LSF = makeLSFkernel_slicer(slitw ,args.seeing[0] ,k ,kernel_range_factor=kernel_range_factor ,pivot=args.seeing[1])
 
@@ -608,18 +608,18 @@ def applySlit(slitw, source_at_slit, sky_at_slit, throughput_slicerOptics, args 
                 spec = source_at_slit[k] * bg_pix_area * Npix_spatial * args.binspat  # signal per pixel * N_pixels
                 if s == 'side': spec *= throughput_slicerOptics
 
-            if args.hires: 
+            if args.hires:
                 # specold = convolveLSF_old(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1] ,wrange_=args.wrange_)
                 spec = convolveLSF(LSF[s], spec ,k ,kernel_range_factor=kernel_range_factor ,wrange_=args.wrange_)
 
-            sourceSpectrumFPA[k][s] = spec 
+            sourceSpectrumFPA[k][s] = spec
 
         for s in slicer_paths:
             # Doesn't include atmosphere or slitloss for sky flux
             # Scale sky flux by effective area: slit_width*pixel_height
             spec = sky_at_slit[k] * bg_pix_area
             if s == 'side': spec *= throughput_slicerOptics
-            if args.hires: 
+            if args.hires:
                 # specold = convolveLSF_old(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1] ,wrange_=args.wrange_)
                 spec = convolveLSF(LSF[s], spec ,k ,kernel_range_factor=kernel_range_factor ,wrange_=args.wrange_)
 
@@ -638,7 +638,7 @@ def applySlit_extended(slitw, source_at_slit, sky_at_slit, throughput_slicerOpti
     elif args.extended != None: Npix_spatial = args.extended
     else: Npix_spatial = None
 
-    sharpness = { k : { s: 
+    sharpness = { k : { s:
         1./array([Npix_spatial]*len(binCenters[k]))  #1/sharpness = [N, N, N...]
         for s in slicer_paths }  for k in chanlist }
 
@@ -658,24 +658,24 @@ def applySlit_extended(slitw, source_at_slit, sky_at_slit, throughput_slicerOpti
         sourceSpectrumFPA[k]={}
         skySpectrumFPA[k]={}
 
-        if args.hires: 
+        if args.hires:
             # Make the convolution kernel for each slice
             LSF = makeLSFkernel_slicer(slitw ,args.seeing[0] ,k ,kernel_range_factor=kernel_range_factor ,pivot=args.seeing[1])
 
         for s in slicer_paths:
             spec = source_at_slit[k] * bg_pix_area * Npix_spatial  # signal per pixel * N_pixels
             if s == 'side': spec *= throughput_slicerOptics
-            if args.hires: 
+            if args.hires:
                 # specold = convolveLSF_old(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1] ,wrange_=args.wrange_)
                 spec = convolveLSF(LSF[s], spec ,k ,kernel_range_factor=kernel_range_factor ,wrange_=args.wrange_)
 
-            sourceSpectrumFPA[k][s] = spec 
+            sourceSpectrumFPA[k][s] = spec
 
             # Doesn't include atmosphere or slitloss for sky flux
             # Scale sky flux by effective area: slit_width*pixel_height
             spec = sky_at_slit[k] * bg_pix_area
             if s == 'side': spec *= throughput_slicerOptics
-            if args.hires: 
+            if args.hires:
                 # specold = convolveLSF_old(spec, slitw ,args.seeing[0] ,k ,pivot=args.seeing[1] ,wrange_=args.wrange_)
                 spec = convolveLSF(LSF[s], spec ,k ,kernel_range_factor=kernel_range_factor ,wrange_=args.wrange_)
 
@@ -691,7 +691,7 @@ def computeSNR(exptime, slitw, args, SSSfocalplane, allChans=False):
     args: argparse object containing user inputs
     SSSfocalplane: function that returns source spectra, sky spectra, and sharpness at the FPA
     allChans: boolean; if True, loop over all channels; otherwise, compute only for target SNR channel
-    
+
     RETURNS:
         allChans --> dictionary of SNR/wavelength bin for all channels
         not allChans --> single SNR value; average over target SNR range
@@ -712,11 +712,11 @@ def computeSNR(exptime, slitw, args, SSSfocalplane, allChans=False):
         SNR2[k] = {}
 
         for s in slicer_paths:
-            SIGNAL = signal[k][s]*exptime 
+            SIGNAL = signal[k][s]*exptime
 
             #account for more background per pixel if binning
             NOISE2 = (bgvar[k][s]*exptime + darkcurrent[k]*exptime*u.pix) * args.binspat
-            NOISE2 += (readnoise[k]*u.pix)**2/u.ct  #read noise per read pixel is unchanged                                
+            NOISE2 += (readnoise[k]*u.pix)**2/u.ct  #read noise per read pixel is unchanged
             NOISE2 = SIGNAL + NOISE2/sharpness[k][s]  #add shot noise
 
             SNR2[k][s] = (SIGNAL**2/NOISE2).to('ct').value
@@ -758,7 +758,7 @@ def plotAllChannels(spec ,lambda_range=None ,binned=False ,spec_allchan=None ,bi
 
     ax.set_ylabel('Flux (%s)' % y[0].unit ) #evaluate the spectrum once to get units
     ax.set_xlim(totalRange)
-    ax.legend()    
-    
+    ax.legend()
+
     if lambda_range is not None:
         ax.axvspan(lambda_range[0], lambda_range[1], alpha=0.2, color='grey') # shade user range

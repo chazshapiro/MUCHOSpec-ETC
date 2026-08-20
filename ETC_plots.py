@@ -1,4 +1,4 @@
-from ETC.ETC_main import *
+from .ETC_main import *
 
 def plotSNR_vs_slit(args, plt):
 
@@ -52,7 +52,7 @@ def plotSNR_vs_slit(args, plt):
     ax2.plot(w_arcsec, R[0], label='R (center)' ,color='green')
     ax2.plot(w_arcsec, R[1], label='R (side)' ,color='green', ls='dashed')
     ax2.set_ylabel('R', color='green')
-    ax2.tick_params(axis ='y', labelcolor = 'green') 
+    ax2.tick_params(axis ='y', labelcolor = 'green')
     ax2.tick_params(axis='y', direction='in', length=6, width=2, colors='g')#, grid_color='r', grid_alpha=0.5)
     ax2.grid(False)
     ax2.legend(loc='lower right')
@@ -129,7 +129,7 @@ def plotSNR_vs_slit_mags(args, plt):
     ax2 = ax1.twinx()
     ax2.plot(x, R, label='R' ,color='green')
     ax2.set_ylabel('R', color='green')
-    ax2.tick_params(axis ='y', labelcolor = 'green') 
+    ax2.tick_params(axis ='y', labelcolor = 'green')
     ax2.tick_params(axis='y', direction='in', length=6, width=2, colors='g')#, grid_color='r', grid_alpha=0.5)
     ax2.grid(False)
     ax2.set_ylim(800,6800)

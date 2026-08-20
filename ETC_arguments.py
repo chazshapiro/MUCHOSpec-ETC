@@ -1,8 +1,8 @@
 import argparse
 from sys import path
 from numpy.ma import is_masked
-from ETC.ETC_import import sourcesdir
-from ETC.ETC_config import slitmodes
+from .ETC_import import sourcesdir
+from .ETC_config import slitmodes
 
 # Hack to avoid exiting the program when there's a parser error
 class ArgumentParserError(Exception): pass
@@ -40,7 +40,7 @@ def posint(value): # require > 0
     return ivalue
 
 def slitfloat(value): # require slit in slit_w_range
-	from ETC.ETC_config import slit_w_range
+	from .ETC_config import slit_w_range
 	fvalue = float(value)
 	slitmin, slitmax = slit_w_range.to('arcsec').value
 	if (fvalue < slitmin) or (fvalue > slitmax):
@@ -49,7 +49,7 @@ def slitfloat(value): # require slit in slit_w_range
 
 SNRparam = parser.add_argument_group('SNR parameters')
 
-from ETC.ETC_config import channels
+from .ETC_config import channels
 help = 'Spectrograph channel used for SNR'
 parser.add_argument('channel', type=str, choices=channels ,help=help)
 
@@ -158,7 +158,7 @@ def formETCcommand(row):  ### Maybe make command as list not a big string  ### s
 	cmd_optargs = [ row[k] for k in cols_exist if not is_masked(row[k]) ]
 
 	cols_exist = (set(etc_optkwargs) & set(row.keys()))
-	cmd_optkwargs = [ '-%s %s'%(k,row[k]) for k in cols_exist if not is_masked(row[k]) ]	
+	cmd_optkwargs = [ '-%s %s'%(k,row[k]) for k in cols_exist if not is_masked(row[k]) ]
 
 	return cmd + ' '.join(cmd_kwargs+cmd_optkwargs+cmd_optargs)
 
@@ -220,7 +220,7 @@ def check_inputs_add_units(args):
 	# Check parameter range
 	if (args.slit > max(slitmodes[args.slitmode])) or (args.slit < min(slitmodes[args.slitmode])):
 		parser.error('-slitwidth %s X requires X be in range %s' % (args.slitmode, str(slitmodes[args.slitmode])))
-	
+
 	# Append units to inputs where applicable
 	import astropy.units as u
 
@@ -241,10 +241,9 @@ def check_inputs_add_units(args):
 	if args.extended: args.seeing[0] = 100.*u.arcsec  # override observed source "size" with something very big
 
 	# Check wavelength range is (min, max) and within specified channel
-	from ETC.ETC_config import channelRange
+	from .ETC_config import channelRange
 	if args.wrange[0] >= args.wrange[1]: parser.error("Wavelength range must be in form [min, max]")
 	if args.wrange[0] < channelRange[args.channel][0]:
 		parser.error("Wavelength range %s not in channel %s"%(str(args.wrange),args.channel))
 	if args.wrange[1] > channelRange[args.channel][1]:
 		parser.error("Wavelength range %s not in channel %s"%(str(args.wrange),args.channel))
-
