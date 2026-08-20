@@ -160,7 +160,7 @@ def run_etc(req: SNRRequest) -> JsonValue:
 # {
 #   "channel": "R",
 #   "wrange": [600, 750],
-#   "etc_mode": "SNR",
+#   "etc_mode": "EXPTIME",
 #   "etc_fixed": 100,
 #   "binspect": 1,
 #   "binspat": 1,
