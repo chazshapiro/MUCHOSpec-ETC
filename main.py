@@ -6,13 +6,12 @@ from astropy.units import Quantity
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, JsonValue
 
-from .ETC_arguments import (
+from ETC_arguments import (
     ArgumentParserError,
     check_inputs_add_units,
     noQuitETCparser,
 )
-from .ETC_config import channels as VALID_CHANNELS
-from .ETC_main import main as run_etc_main
+from ETC_main import main as run_etc_main
 
 
 class ETCMode(str, Enum):
@@ -64,14 +63,12 @@ class SNRRequest(BaseModel):
     magsystem: MagSystem
     magfilter: str
 
-    model: list[str] = ["constant"]  # could be a list
+    model: list[str] = ["constant"]
     z: float = 0.0  # positive
     e_bv: float = 0.0
 
     extmodel: str = "mwavg"
     extended: int | None = None
-
-    # add a validator that checks the channels
 
 
 def build_args(req: SNRRequest) -> Namespace:
@@ -148,13 +145,6 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="ETC Service", lifespan=lifespan)
-
-
-# make some sort of payload instead of the argparser
-# make an SNR request basemodel
-# translate those into args
-# run main and send out dict of results
-
 
 @app.post("/etc")
 def run_etc(req: SNRRequest) -> JsonValue:

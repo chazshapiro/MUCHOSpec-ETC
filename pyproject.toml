@@ -3,5 +3,8 @@ name = "etc-microservice"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
+    "astropy>=8.0.1",
     "fastapi[standard]>=0.141.1",
+    "scipy==1.14.1",
+    "synphot>=1.7.0",
 ]
